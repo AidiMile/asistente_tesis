@@ -1,0 +1,28 @@
+{"text": "Hola, buenos días", "label": "Saludo"}
+{"text": "Buenas tardes, ¿cómo estás?", "label": "Saludo"}
+{"text": "Qué tal pana, saludos", "label": "Saludo"}
+{"text": "Hola ñaño", "label": "Saludo"}
+{"text": "Buenas noches, hasta mañana", "label": "Saludo"}
+{"text": "¿Cuál es la capital del Ecuador?", "label": "Pregunta"}
+{"text": "¿Cuántas provincias tiene el país?", "label": "Pregunta"}
+{"text": "¿Quién fue Eloy Alfaro?", "label": "Pregunta"}
+{"text": "¿Por qué hace tanto frío en Quito?", "label": "Pregunta"}
+{"text": "¿Cómo funciona una red neuronal?", "label": "Pregunta"}
+{"text": "¿Dónde queda el volcán Cotopaxi?", "label": "Pregunta"}
+{"text": "Redacta un resumen sobre la independencia de Guayaquil", "label": "Solicitud"}
+{"text": "Necesito un informe sobre el cambio climático en Ecuador", "label": "Solicitud"}
+{"text": "Explícame qué es el procesamiento de lenguaje natural", "label": "Solicitud"}
+{"text": "Genera un ensayo sobre la identidad ecuatoriana", "label": "Solicitud"}
+{"text": "Por favor resume este tema de bases de datos", "label": "Solicitud"}
+{"text": "Quiero una explicación sencilla de la fotosíntesis", "label": "Solicitud"}
+{"text": "Muestra mi historial de consultas", "label": "Comando"}
+{"text": "Borra la conversación actual", "label": "Comando"}
+{"text": "Cambia el idioma de la respuesta", "label": "Comando"}
+{"text": "Lista mis últimas consultas", "label": "Comando"}
+{"text": "Reinicia el chat", "label": "Comando"}
+{"text": "¿Qué significa chuta?", "label": "Consulta_Modismo"}
+{"text": "¿Qué quiere decir achachay?", "label": "Consulta_Modismo"}
+{"text": "Significado de guambra en la Sierra", "label": "Consulta_Modismo"}
+{"text": "¿Cómo se usa la palabra yapa?", "label": "Consulta_Modismo"}
+{"text": "¿Qué es un ñaño?", "label": "Consulta_Modismo"}
+{"text": "Explícame la expresión ecuatoriana de ley", "label": "Consulta_Modismo"}

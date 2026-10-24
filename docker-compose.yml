@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_tesis
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password123}
+      POSTGRES_DB: ${POSTGRES_DB:-asistente_db}
+    ports: ["5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-asistente_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_nlp_ec
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/setup_models.sh"]
+    ports: ["11434:11434"]
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./ollama/Modelfile:/Modelfile:ro
+      - ./ollama/setup_models.sh:/setup_models.sh:ro
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  backend:
+    build: ./backend
+    container_name: django_asistente_backend
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py seed_modismos &&
+             python manage.py ensure_admin &&
+             gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 180"
+    volumes: ["./backend:/app"]
+    ports: ["8000:8000"]
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-tesis-upec-2026-cambiar-en-produccion}
+      DEBUG: ${DEBUG:-True}
+      POSTGRES_DB: ${POSTGRES_DB:-asistente_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password123}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: asistente-ecuatoriano
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plnec.ec}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin12345}
+      ADMIN_NAME: ${ADMIN_NAME:-Administradoras PLN-EC}
+    depends_on:
+      db: {condition: service_healthy}
+      ollama: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/api/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    container_name: angular_asistente_frontend
+    restart: unless-stopped
+    ports: ["8080:80"]
+    depends_on:
+      backend: {condition: service_healthy}
+
+volumes:
+  postgres_data:
+    name: asistente_postgres_data
+  ollama_models:
+    name: asistente_ollama_models

@@ -1,0 +1,77 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pln}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pln}
+      POSTGRES_DB: ${POSTGRES_DB:-asistente_pln_ec}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pln} -d ${POSTGRES_DB:-asistente_pln_ec}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes: [ollama:/root/.ollama]
+    ports: ["11434:11434"]
+    restart: unless-stopped
+    # GPU NVIDIA (opcional): descomente
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
+
+  ollama-init:        # descarga los modelos una sola vez
+    image: ollama/ollama:latest
+    depends_on: [ollama]
+    environment: {OLLAMA_HOST: "http://ollama:11434"}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull ${OLLAMA_MODEL:-llama3}"]
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args: {INSTALL_ML: "${INSTALL_ML:-false}"}
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-pln}:${POSTGRES_PASSWORD:-pln}@db:5432/${POSTGRES_DB:-asistente_pln_ec}
+      OLLAMA_URL: http://ollama:11434
+      USE_NER: ${USE_NER:-true}
+      INTENT_MODEL_DIR: /models/intent-beto
+      HF_HOME: /models/hf
+    depends_on:
+      db: {condition: service_healthy}
+      ollama-init: {condition: service_completed_successfully}
+    volumes: [models:/models]
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args: {API_BASE_URL: /api}
+    depends_on:
+      backend: {condition: service_healthy}
+    ports: ["8080:80"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  ollama:
+  models:

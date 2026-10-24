@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Panel Principal - Asistente Tesis PLN{% endblock %}
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12 d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm">
+        <h4 class="text-primary m-0">🤖 Asistente Virtual PLN (Contexto Ecuatoriano)</h4>
+        <div>
+            <span class="me-3 text-secondary">Hola, <strong>{{ nombre }}</strong></span>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Cerrar Sesión</a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Columna Izquierda: Formulario de Entrada y Parámetros -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 mb-4">
+            <h5 class="card-title text-dark mb-3">Generación de Texto Automatizado</h5>
+            <form id="generationForm">
+                <div class="mb-3">
+                    <label for="queryText" class="form-label">Escribe tu consulta o frase (ej. modismos ecuatorianos):</label>
+                    <textarea class="form-control" id="queryText" rows="4" placeholder="Ej: Explícame qué significa irse de 'chch' o redacta un texto sobre la Mitad del Mundo..." required></textarea>
+                </div>
+                
+                <h6 class="text-muted mt-4">Parámetros del Modelo Neuronal</h6>
+                <div class="mb-3">
+                    <label for="temperature" class="form-label">Temperatura (<span id="tempVal">0.7</span>):</label>
+                    <input type="range" class="form-range" id="temperature" min="0.1" max="1.5" step="0.1" value="0.7" oninput="document.getElementById('tempVal').innerText = this.value">
+                </div>
+                <div class="mb-3">
+                    <label for="topP" class="form-label">Top P (<span id="topPVal">0.9</span>):</label>
+                    <input type="range" class="form-range" id="topP" min="0.1" max="1.0" step="0.05" value="0.9" oninput="document.getElementById('topPVal').innerText = this.value">
+                </div>
+                <div class="mb-3">
+                    <label for="maxLength" class="form-label">Longitud Máxima de Tokens:</label>
+                    <input type="number" class="form-control" id="maxLength" value="100" min="20" max="500">
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100" id="btnGenerar">Generar Texto con IA</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Columna Derecha: Resultado y Métricas de Evaluación -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-4 mb-4">
+            <h5 class="card-title text-dark mb-3">Texto Generado</h5>
+            <div class="p-3 bg-light border rounded mb-4" style="min-height: 150px; white-space: pre-wrap;" id="resultadoGenerado">
+                <span class="text-muted">El texto generado por la red neuronal aparecerá aquí...</span>
+            </div>
+
+            <h5 class="card-title text-dark mb-3">📊 Métricas de Evaluación (Tesis)</h5>
+            <ul class="list-group">
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    BLEU Score
+                    <span class="badge bg-secondary rounded-pill" id="metricBleu">-</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    ROUGE Score
+                    <span class="badge bg-secondary rounded-pill" id="metricRouge">-</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    BERTScore
+                    <span class="badge bg-secondary rounded-pill" id="metricBert">-</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

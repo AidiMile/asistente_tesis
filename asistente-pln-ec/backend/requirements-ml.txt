@@ -1,0 +1,10 @@
+# Modulos de IA (pesados). Se instalan en Docker con INSTALL_ML=true
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+transformers==4.46.3
+faster-whisper==1.1.0
+sacrebleu==2.4.3
+rouge-score==0.1.2
+bert-score==0.3.13
+datasets==3.1.0
+accelerate==1.1.1
