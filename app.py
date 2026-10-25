@@ -7,12 +7,11 @@ from models.nlp_generator import NLPGenerator
 app = Flask(__name__)
 
 # Configuración de la base de datos PostgreSQL desde Docker
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URL', 
-    'postgresql://postgres:password123@db:5432/asistente_db'
-)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = 'clave_secreta_tesis_upec_2026'
+
+app.secret_key = os.environ['FLASK_SECRET_KEY']
 
 db.init_app(app)
 

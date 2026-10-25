@@ -4,7 +4,7 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-tesis-upec-pln-ec-2026-carchi-key')
+SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
@@ -64,7 +64,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Configuración de Base de Datos PostgreSQL
 DB_NAME = os.getenv('POSTGRES_DB', 'asistente_db')
 DB_USER = os.getenv('POSTGRES_USER', 'postgres')
-DB_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'password123')
+DB_PASSWORD = os.environ['POSTGRES_PASSWORD']
 DB_HOST = os.getenv('POSTGRES_HOST', 'db')
 DB_PORT = os.getenv('POSTGRES_PORT', '5432')
 

@@ -9,7 +9,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         correo = os.getenv('ADMIN_EMAIL', 'admin@plnec.ec').strip().lower()
-        password = os.getenv('ADMIN_PASSWORD', 'Admin12345')
+        password = os.environ['ADMIN_PASSWORD']
         nombre = os.getenv('ADMIN_NAME', 'Administradoras PLN-EC')
 
         admin, created = Usuario.objects.get_or_create(
