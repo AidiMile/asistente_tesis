@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     llm_backend: str = "ollama"  # ollama | mock
     ollama_url: str = "http://localhost:11434"
     default_model: str = "llama3"
-    llm_timeout_s: float = 180.0
-    history_turns: int = 3
+    llm_timeout_s: float = 300.0
+    history_turns: int = 2
 
     # PLN
     intent_model_dir: str = "/models/intent-beto"
