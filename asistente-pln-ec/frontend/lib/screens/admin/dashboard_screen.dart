@@ -80,7 +80,7 @@ class _S extends State<DashboardScreen> {
               Text('Parámetros del modelo generativo', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               DropdownButtonFormField<int>(
-                value: _modelId,
+                initialValue: _modelId,
                 decoration: const InputDecoration(labelText: 'Modelo activo', border: OutlineInputBorder()),
                 items: [
                   for (final m in _model!['modelos'])
