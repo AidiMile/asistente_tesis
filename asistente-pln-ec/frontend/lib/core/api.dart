@@ -69,9 +69,10 @@ class Api {
   Future<dynamic> delete(String p) =>
       _wrap(() async => _handle(await http.delete(_uri(p), headers: _headers)));
 
-  Future<dynamic> upload(String p, List<int> bytes, String filename) => _wrap(() async {
+  Future<dynamic> upload(String p, List<int> bytes, String filename, {Map<String, String>? fields}) => _wrap(() async {
         final req = http.MultipartRequest('POST', _uri(p));
         if (token != null) req.headers['Authorization'] = 'Bearer $token';
+        if (fields != null) req.fields.addAll(fields);
         req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
         return _handle(await http.Response.fromStream(await req.send()));
       });

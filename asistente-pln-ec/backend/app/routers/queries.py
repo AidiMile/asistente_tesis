@@ -14,8 +14,14 @@ router = APIRouter(tags=["Consultas"])
 MAX_AUDIO_BYTES = 15 * 1024 * 1024
 
 
-def _run(db, user, texto, tipo, bg: BackgroundTasks):
-    out = process_query(db, user, texto, tipo)
+from typing import Optional
+from fastapi import Form
+
+
+def _run(db, user, texto, tipo, bg: BackgroundTasks, id_historial_origen: int | None = None,
+         historial_contexto: list | None = None):
+    out = process_query(db, user, texto, tipo, id_historial_origen=id_historial_origen,
+                        historial_contexto=historial_contexto)
     ref = out.pop("_reference")
     bg.add_task(auto_evaluate, out["id_respuesta"], ref)
     return out
@@ -24,11 +30,15 @@ def _run(db, user, texto, tipo, bg: BackgroundTasks):
 @router.post("/queries", response_model=QueryOut, summary="Consulta por texto o dictado por voz (ya transcrito)")
 def query_text(data: QueryIn, bg: BackgroundTasks, user: Usuario = Depends(get_current_user),
                db: Session = Depends(get_db)):
-    return _run(db, user, data.texto, data.tipo_entrada, bg)
+    return _run(db, user, data.texto, data.tipo_entrada, bg,
+                id_historial_origen=data.id_historial_origen,
+                historial_contexto=data.historial_contexto)
 
 
 @router.post("/queries/audio", response_model=QueryOut, summary="Mensaje de voz (audio → texto con Whisper)")
-async def query_audio(bg: BackgroundTasks, file: UploadFile = File(...), user: Usuario = Depends(get_current_user),
+async def query_audio(bg: BackgroundTasks, file: UploadFile = File(...),
+                      id_historial_origen: Optional[int] = Form(None),
+                      user: Usuario = Depends(get_current_user),
                       db: Session = Depends(get_db)):
     data = await file.read()
     if not data or len(data) > MAX_AUDIO_BYTES:
@@ -38,17 +48,26 @@ async def query_audio(bg: BackgroundTasks, file: UploadFile = File(...), user: U
     texto = await run_in_threadpool(stt.transcribe, data, suffix)
     if not texto:
         raise HTTPException(422, "No se detectó voz en el audio")
-    return await run_in_threadpool(_run, db, user, texto[:settings.max_query_chars], "audio", bg)
+    return await run_in_threadpool(_run, db, user, texto[:settings.max_query_chars], "audio", bg,
+                                  id_historial_origen=id_historial_origen)
 
 
 def hist_item(h: Historial, with_user: bool = False) -> dict:
+    msgs = h.mensajes
+    if not msgs:
+        msgs = []
+        if h.consulta and h.consulta.texto_consulta:
+            msgs.append({"role": "user", "content": h.consulta.texto_consulta})
+        if h.respuesta and h.respuesta.texto_generado:
+            msgs.append({"role": "assistant", "content": h.respuesta.texto_generado})
     return {"id_historial": h.id_historial, "id_consulta": h.id_consulta, "id_respuesta": h.id_respuesta,
             "fecha": h.fecha, "tipo_entrada": h.tipo_entrada, "consulta": h.consulta.texto_consulta,
             "respuesta": h.respuesta.texto_generado,
             "intencion": h.consulta.intencion.nombre if h.consulta.intencion else None,
             "tiempo_respuesta": float(h.respuesta.tiempo_respuesta or 0),
             "modismos": [m["modismo"] for m in (h.respuesta.modismos_detectados or [])],
-            "usuario": h.usuario.nombre_usuario if with_user else None}
+            "usuario": h.usuario.nombre_usuario if with_user else None,
+            "mensajes": msgs}
 
 
 def paged(db: Session, stmt, skip, limit, with_user=False):
@@ -76,6 +95,19 @@ def my_history_item(id_historial: int, user: Usuario = Depends(get_current_user)
     return hist_item(h)
 
 
+@router.delete("/history/{id_historial}", status_code=204, summary="Eliminar conversación del historial")
+def delete_history_item(id_historial: int, user: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
+    h = db.get(Historial, id_historial)
+    if not h or (h.id_usuario != user.id_usuario and user.rol != "administrador"):
+        raise HTTPException(404, "Registro no encontrado")
+    consulta = h.consulta
+    db.delete(h)
+    if consulta:
+        db.delete(consulta)
+    db.commit()
+    return None
+
+
 @router.get("/admin/history", response_model=Page, tags=["Admin"], summary="Historial global")
 def global_history(skip: int = 0, limit: int = 20, usuario: str | None = None, q: str | None = None,
                    _: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
@@ -87,3 +119,16 @@ def global_history(skip: int = 0, limit: int = 20, usuario: str | None = None, q
         stmt = stmt.join(Consulta, Consulta.id_consulta == Historial.id_consulta).where(
             Consulta.texto_consulta.ilike(f"%{q}%"))
     return paged(db, stmt, skip, min(limit, 200), with_user=True)
+
+
+@router.delete("/admin/history/{id_historial}", status_code=204, tags=["Admin"], summary="Eliminar conversación del historial (admin)")
+def delete_history_admin(id_historial: int, _: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
+    h = db.get(Historial, id_historial)
+    if not h:
+        raise HTTPException(404, "Registro no encontrado")
+    consulta = h.consulta
+    db.delete(h)
+    if consulta:
+        db.delete(consulta)
+    db.commit()
+    return None

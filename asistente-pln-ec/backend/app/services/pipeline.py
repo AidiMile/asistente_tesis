@@ -98,7 +98,9 @@ def retrieve_corpus(db: Session, query: str, idioms: list[IdiomEntry]) -> list[d
             for d, n in rows]
 
 
-def build_messages(db: Session, user: Usuario, texto: str, a: Analysis, snippets: list[dict]) -> list[dict]:
+def build_messages(db: Session, user: Usuario, texto: str, a: Analysis, snippets: list[dict],
+                   historial_contexto: list | None = None,
+                   id_historial_origen: int | None = None) -> list[dict]:
     sys_parts = [SYSTEM_BASE, INTENT_HINTS.get(a.intent, "")]
     if a.entities:
         sys_parts.append("Entidades detectadas: " + "; ".join(f"{n} ({t})" for n, t in a.entities))
@@ -118,17 +120,35 @@ def build_messages(db: Session, user: Usuario, texto: str, a: Analysis, snippets
             f"corpus: {s.get('corpus') or 'general'}. {s['contenido'][:700]}"
             for k, s in enumerate(snippets)))
     msgs = [{"role": "system", "content": "\n\n".join(p for p in sys_parts if p)}]
-    prev = db.execute(select(Consulta.texto_consulta, Respuesta.texto_generado)
-                      .join(Respuesta, Respuesta.id_consulta == Consulta.id_consulta)
-                      .where(Consulta.id_usuario == user.id_usuario)
-                      .order_by(Consulta.id_consulta.desc()).limit(settings.history_turns)).all()
-    for q, r in reversed(prev):
-        msgs += [{"role": "user", "content": q}, {"role": "assistant", "content": r[:1200]}]
+
+    # Si se envía un historial de conversación explícito (para continuar un chat)
+    if historial_contexto:
+        for m in historial_contexto[-4:]:
+            role = "user" if (getattr(m, "role", None) or (m.get("role") if isinstance(m, dict) else None)) == "user" else "assistant"
+            content = getattr(m, "content", None) or (m.get("content") if isinstance(m, dict) else "")
+            msgs.append({"role": role, "content": str(content)[:400]})
+    elif id_historial_origen:
+        h = db.get(Historial, id_historial_origen)
+        if h and h.consulta and h.respuesta:
+            msgs += [
+                {"role": "user", "content": h.consulta.texto_consulta},
+                {"role": "assistant", "content": h.respuesta.texto_generado[:400]},
+            ]
+    else:
+        prev = db.execute(select(Consulta.texto_consulta, Respuesta.texto_generado)
+                          .join(Respuesta, Respuesta.id_consulta == Consulta.id_consulta)
+                          .where(Consulta.id_usuario == user.id_usuario)
+                          .order_by(Consulta.id_consulta.desc()).limit(settings.history_turns)).all()
+        for q, r in reversed(prev):
+            msgs += [{"role": "user", "content": q}, {"role": "assistant", "content": r[:350]}]
+
     msgs.append({"role": "user", "content": texto})
     return msgs
 
 
-def process_query(db: Session, user: Usuario, texto: str, tipo_entrada: str) -> dict:
+def process_query(db: Session, user: Usuario, texto: str, tipo_entrada: str,
+                  id_historial_origen: int | None = None,
+                  historial_contexto: list | None = None) -> dict:
     t0 = time.perf_counter()
     texto = texto.strip()
     if not texto:
@@ -136,8 +156,9 @@ def process_query(db: Session, user: Usuario, texto: str, tipo_entrada: str) -> 
     if len(texto) > settings.max_query_chars:
         raise HTTPException(422, f"La consulta supera el máximo de {settings.max_query_chars} caracteres")
 
+    is_continued = bool(id_historial_origen or (historial_contexto and len(historial_contexto) > 0))
     analysis = nlp_service.analyze(texto)
-    learned = get_learned_answer(db, texto)
+    learned = None if is_continued else get_learned_answer(db, texto)
     snippets = retrieve_corpus(db, texto, analysis.idioms)
     model, params = get_active_model(db)
     model_name = model.nombre_modelo if model else settings.default_model
@@ -146,9 +167,12 @@ def process_query(db: Session, user: Usuario, texto: str, tipo_entrada: str) -> 
         learned.veces_utilizado += 1
         origin = "base_local"
     else:
-        messages = build_messages(db, user, texto, analysis, snippets)
+        messages = build_messages(db, user, texto, analysis, snippets,
+                                  historial_contexto=historial_contexto,
+                                  id_historial_origen=id_historial_origen)
         answer = llm.chat(messages, model_name, params["temperatura"], params["top_p"], params["max_tokens"])
-        remember_answer(db, texto, answer, model_name)
+        if not is_continued:
+            remember_answer(db, texto, answer, model_name)
         origin = "modelo_generativo"
     elapsed = round(time.perf_counter() - t0, 2)
 
@@ -168,16 +192,51 @@ def process_query(db: Session, user: Usuario, texto: str, tipo_entrada: str) -> 
                      fuentes_corpus=[{"id_documento": s["id_documento"], "corpus": s.get("corpus")} for s in snippets])
     db.add(resp)
     db.flush()
-    db.add(Historial(id_usuario=user.id_usuario, id_consulta=consulta.id_consulta,
-                     id_respuesta=resp.id_respuesta, tipo_entrada=tipo_entrada))
+    current_hist_id = None
+    existing_hist = db.get(Historial, id_historial_origen) if id_historial_origen else None
+    if existing_hist and (existing_hist.id_usuario == user.id_usuario or user.rol == "administrador"):
+        # UPDATE en la conversación existente (sin duplicar registro en el historial)
+        existing_hist.id_respuesta = resp.id_respuesta
+        from datetime import datetime
+        existing_hist.fecha = datetime.utcnow()
+        existing_hist.tipo_entrada = tipo_entrada
+
+        msgs = list(existing_hist.mensajes or [])
+        if not msgs:
+            if existing_hist.consulta:
+                msgs.append({"role": "user", "content": existing_hist.consulta.texto_consulta})
+            if existing_hist.respuesta:
+                msgs.append({"role": "assistant", "content": existing_hist.respuesta.texto_generado})
+        msgs.append({"role": "user", "content": texto})
+        msgs.append({"role": "assistant", "content": answer})
+        existing_hist.mensajes = msgs
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(existing_hist, "mensajes")
+        current_hist_id = existing_hist.id_historial
+    else:
+        # Nuevo registro de chat
+        new_msgs = [
+            {"role": "user", "content": texto},
+            {"role": "assistant", "content": answer}
+        ]
+        new_hist = Historial(
+            id_usuario=user.id_usuario,
+            id_consulta=consulta.id_consulta,
+            id_respuesta=resp.id_respuesta,
+            tipo_entrada=tipo_entrada,
+            mensajes=new_msgs
+        )
+        db.add(new_hist)
+        db.flush()
+        current_hist_id = new_hist.id_historial
     db.commit()
 
     reference = "\n".join([f"{i.nombre}: {' '.join(i.significados)}" for i in analysis.idioms] +
                           [s["contenido"][:700] for s in snippets])
-    return {"id_consulta": consulta.id_consulta, "id_respuesta": resp.id_respuesta, "texto_consulta": texto,
-            "tipo_entrada": tipo_entrada, "intencion": analysis.intent, "confianza": float(analysis.confidence),
-            "entidades": [{"nombre": n, "tipo": t} for n, t in analysis.entities], "modismos": hits,
-            "respuesta": answer, "tiempo_respuesta": elapsed,
+    return {"id_consulta": consulta.id_consulta, "id_respuesta": resp.id_respuesta, "id_historial": current_hist_id,
+            "texto_consulta": texto, "tipo_entrada": tipo_entrada, "intencion": analysis.intent,
+            "confianza": float(analysis.confidence), "entidades": [{"nombre": n, "tipo": t} for n, t in analysis.entities],
+            "modismos": hits, "respuesta": answer, "tiempo_respuesta": elapsed,
             "modelo": learned.modelo if learned else model_name, "origen_respuesta": origin,
             "fecha": resp.fecha_respuesta, "_reference": reference}
 

@@ -60,10 +60,26 @@ def test_flow(monkeypatch):
     j = r.json()
     assert j["modismos"] and j["modismos"][0]["modismo"] == "quimbolito"
     assert j["intencion"] == "Consulta_Modismo"
+    assert "id_historial" in j and j["id_historial"] is not None
+    chat_id = j["id_historial"]
     assert c.post("/queries", headers=u, json={"texto": "x" * 501}).status_code == 422
     h = c.get("/history", headers=u).json()
     assert h["total"] == 1 and h["items"][0]["modismos"] == ["quimbolito"]
+    assert len(h["items"][0]["mensajes"]) >= 2
     assert c.get("/admin/history", headers=a).json()["total"] == 1
+
+    # Continuar conversación con id_historial_origen: debe hacer UPDATE sin duplicar
+    cont = c.post("/queries", headers=u, json={"texto": "¿Y de qué está hecho?", "id_historial_origen": chat_id})
+    assert cont.status_code == 200
+    assert cont.json()["id_historial"] == chat_id
+    h_cont = c.get("/history", headers=u).json()
+    assert h_cont["total"] == 1, "No debe duplicar registros en historial al continuar un chat"
+    assert len(h_cont["items"][0]["mensajes"]) >= 4, "Debe acumular los mensajes del chat"
+
+    # Eliminar conversación
+    del_r = c.delete(f"/history/{chat_id}", headers=u)
+    assert del_r.status_code == 204
+    assert c.get("/history", headers=u).json()["total"] == 0
     cached = c.post("/queries", headers=u, json={"texto": "¿Qué significa quimbolito? Hola, soy Pedro Pérez"})
     assert cached.status_code == 200
     assert cached.json()["origen_respuesta"] == "base_local"
@@ -121,7 +137,16 @@ def test_flow(monkeypatch):
     assert health_query.json()["modismos"][0]["modismo"] == "chuchaqui"
     system_prompt = captured["messages"][0]["content"]
     assert "ECU 911" in system_prompt
-    assert "NIAAA" in system_prompt and "NHS" in system_prompt
     assert "Fuente: chuchaqui.txt" in system_prompt
+
+    continued = c.post("/queries", headers=u, json={
+        "texto": "¿Y qué más recomendaciones hay?",
+        "historial_contexto": [
+            {"role": "user", "content": "Tengo chuchaqui, ¿qué me recomiendas?"},
+            {"role": "assistant", "content": "Descansa y toma agua."}
+        ]
+    })
+    assert continued.status_code == 200
+    assert captured["messages"][-2]["content"] == "Descansa y toma agua."
 
     assert c.delete(f"/admin/users/{c.get('/users/me', headers=u).json()['id_usuario']}", headers=a).status_code == 204

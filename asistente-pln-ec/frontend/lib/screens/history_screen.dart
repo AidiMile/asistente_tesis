@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../core/api.dart';
 import '../core/auth.dart';
+import '../core/chat_session.dart';
 import '../widgets/common.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -85,6 +87,42 @@ class _S extends State<HistoryScreen> {
                           if (widget.global && h['usuario'] != null) '@${h['usuario']}',
                           if (h['intencion'] != null) h['intencion'],
                         ].join(' · ')),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Color(0xFFE53E3E), size: 20),
+                              tooltip: 'Eliminar del historial',
+                              onPressed: () async {
+                                final ok = await confirm(context, '¿Estás seguro de que deseas eliminar este registro?');
+                                if (ok && context.mounted) {
+                                  final session = context.read<ChatSession>();
+                                  final auth = context.read<AuthState>();
+                                  final success = await session.deleteChat(auth.api, h['id_historial'], isAdmin: auth.isAdmin);
+                                  if (context.mounted) {
+                                    if (success) {
+                                      setState(() {
+                                        _items.removeAt(i);
+                                        _total = (_total - 1).clamp(0, 999999);
+                                      });
+                                      snack(context, 'Registro eliminado');
+                                    } else {
+                                      snack(context, 'No se pudo eliminar el registro', error: true);
+                                    }
+                                  }
+                                }
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_forward),
+                              tooltip: 'Continuar este chat',
+                              onPressed: () {
+                                context.read<ChatSession>().selectChat(h);
+                                context.go('/chat', extra: h);
+                              },
+                            ),
+                          ],
+                        ),
                         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                         expandedCrossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -96,8 +134,22 @@ class _S extends State<HistoryScreen> {
                                 for (final m in h['modismos']) Chip(label: Text('$m'), visualDensity: VisualDensity.compact)
                               ]),
                             ),
-                          Text('Tiempo de respuesta: ${h['tiempo_respuesta']} s',
-                              style: Theme.of(context).textTheme.labelSmall),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Tiempo de respuesta: ${h['tiempo_respuesta']} s',
+                                  style: Theme.of(context).textTheme.labelSmall),
+                              FilledButton.icon(
+                                icon: const Icon(Icons.forum_outlined, size: 16),
+                                label: const Text('Continuar conversación'),
+                                onPressed: () {
+                                  context.read<ChatSession>().selectChat(h);
+                                  context.go('/chat', extra: h);
+                                },
+                              ),
+                            ],
+                          ),
                         ],
                       );
                     }),

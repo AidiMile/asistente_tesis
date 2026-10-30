@@ -36,7 +36,12 @@ GoRouter buildRouter(AuthState auth) => GoRouter(
         ShellRoute(
           builder: (_, state, child) => AppShell(location: state.uri.path, child: child),
           routes: [
-            GoRoute(path: '/chat', builder: (_, __) => const ChatScreen()),
+            GoRoute(
+              path: '/chat',
+              builder: (_, state) => ChatScreen(
+                initialItem: state.extra is Map<String, dynamic> ? state.extra as Map<String, dynamic> : null,
+              ),
+            ),
             GoRoute(path: '/history', builder: (_, __) => const HistoryScreen()),
             GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
             GoRoute(path: '/admin', builder: (_, __) => const DashboardScreen()),

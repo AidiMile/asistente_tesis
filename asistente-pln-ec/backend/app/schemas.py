@@ -77,9 +77,16 @@ class AdminUserUpdate(BaseModel):
 
 
 # ---- Consultas
+class ChatMessageContext(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class QueryIn(BaseModel):
     texto: str = Field(min_length=1)
     tipo_entrada: Literal["texto", "dictado"] = "texto"
+    id_historial_origen: Optional[int] = None
+    historial_contexto: Optional[list[ChatMessageContext]] = None
 
 
 class IdiomHit(BaseModel):
@@ -98,6 +105,7 @@ class EntityOut(BaseModel):
 class QueryOut(BaseModel):
     id_consulta: int
     id_respuesta: int
+    id_historial: Optional[int] = None
     texto_consulta: str
     tipo_entrada: str
     intencion: str
@@ -123,6 +131,7 @@ class HistoryItem(BaseModel):
     tiempo_respuesta: Optional[float]
     modismos: list[str] = []
     usuario: Optional[str] = None
+    mensajes: Optional[list[dict]] = None
 
 
 class Page(BaseModel):

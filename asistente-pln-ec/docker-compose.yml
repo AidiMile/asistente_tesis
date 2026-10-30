@@ -15,6 +15,9 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    environment:
+      OLLAMA_KEEP_ALIVE: "24h"
+      OLLAMA_NUM_PARALLEL: "1"
     volumes: [ollama:/root/.ollama]
     ports: ["11434:11434"]
     restart: unless-stopped
@@ -41,13 +44,15 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-pln}:${POSTGRES_PASSWORD:-pln}@db:5432/${POSTGRES_DB:-asistente_pln_ec}
       OLLAMA_URL: http://ollama:11434
-      USE_NER: ${USE_NER:-true}
+      USE_NER: ${USE_NER:-false}
       INTENT_MODEL_DIR: /models/intent-beto
       HF_HOME: /models/hf
     depends_on:
       db: {condition: service_healthy}
       ollama-init: {condition: service_completed_successfully}
-    volumes: [models:/models]
+    volumes:
+      - models:/models
+      - ./backend/app:/app/app
     ports: ["8000:8000"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
@@ -65,7 +70,7 @@ services:
       backend: {condition: service_healthy}
     ports: ["8080:80"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

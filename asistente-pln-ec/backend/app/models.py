@@ -189,6 +189,7 @@ class Historial(Base):
     id_respuesta: Mapped[int] = mapped_column(ForeignKey("respuestas.id_respuesta", ondelete="CASCADE"))
     tipo_entrada: Mapped[Optional[str]] = mapped_column(String(20))
     fecha: Mapped[datetime] = mapped_column(DateTime, server_default=_now)
+    mensajes: Mapped[Optional[list]] = mapped_column(JSONType, default=list)
     usuario: Mapped[Usuario] = relationship(back_populates="historial")
     consulta: Mapped[Consulta] = relationship(back_populates="historial")
     respuesta: Mapped[Respuesta] = relationship(back_populates="historial")

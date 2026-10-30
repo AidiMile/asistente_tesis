@@ -48,6 +48,16 @@ def activate(mid: int, _=Depends(require_admin), db: Session = Depends(get_db)):
     target = db.get(ModeloIA, mid)
     if not target:
         raise HTTPException(404, "Modelo no encontrado")
+    h = llm.health()
+    if h.get("ok"):
+        installed = [m.split(":")[0] for m in h.get("models", [])]
+        if installed and target.nombre_modelo not in installed:
+            raise HTTPException(
+                400,
+                f"El modelo '{target.nombre_modelo}' no está instalado en Ollama. "
+                f"Modelos disponibles en Ollama: {', '.join(installed)}. "
+                f"Descárguelo primero antes de activarlo."
+            )
     for m in db.scalars(select(ModeloIA)):
         m.activo = m.id_modelo == mid
     db.commit()

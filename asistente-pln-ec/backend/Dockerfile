@@ -7,5 +7,6 @@ RUN pip install -r requirements.txt && \
     if [ "$INSTALL_ML" = "true" ]; then pip install -r requirements-ml.txt; fi
 COPY backend/ /app/
 COPY database/ /app/database/
+RUN chmod +x /app/start.sh
 EXPOSE 8000
 CMD ["./start.sh"]
