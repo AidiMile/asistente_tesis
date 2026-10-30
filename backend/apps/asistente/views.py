@@ -18,6 +18,18 @@ from .serializers import (
 )
 from .services.ollama_client import OllamaNLPService
 
+
+def es_administrador(user):
+    """Valida el rol en el servidor; nunca confía en lo que muestre el frontend."""
+    return getattr(getattr(user, 'perfil', None), 'rol', None) == 'Administrador'
+
+
+class EsAdministrador(permissions.BasePermission):
+    message = 'Solo el administrador puede gestionar los parámetros del modelo.'
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and es_administrador(request.user))
+
 class GenerarTextoAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -29,9 +41,15 @@ class GenerarTextoAPIView(APIView):
         data = serializer.validated_data
         texto = data['texto']
         tipo_entrada = data['tipo_entrada']
-        temperatura = data['temperatura']
-        top_p = data['top_p']
-        max_tokens = data['max_tokens']
+        # El servidor ignora parámetros manipulados por usuarios sin permisos.
+        if es_administrador(request.user):
+            temperatura = data['temperatura']
+            top_p = data['top_p']
+            max_tokens = data['max_tokens']
+        else:
+            temperatura = 0.2
+            top_p = 0.9
+            max_tokens = 120
 
         id_conversacion = data.get('id_conversacion')
         if id_conversacion:
@@ -53,13 +71,6 @@ class GenerarTextoAPIView(APIView):
             for respuesta_previa in consulta_previa.respuestas.all():
                 historial_contexto.append({'sender': 'assistant', 'text': respuesta_previa.texto_generado})
 
-        # Buscar primero una respuesta equivalente en la base local aprendida.
-        anterior = None
-        if not historial_contexto:
-            anterior = (Respuesta.objects.select_related('consulta', 'modelo', 'evaluacion')
-                        .filter(consulta__texto_consulta__iexact=texto)
-                        .order_by('-fecha_respuesta').first())
-
         # 1. Guardar la consulta en PostgreSQL
         consulta = Consulta.objects.create(
             usuario=request.user,
@@ -68,20 +79,6 @@ class GenerarTextoAPIView(APIView):
             tipo_entrada=tipo_entrada
         )
         Conversacion.objects.filter(pk=conversacion.pk).update(fecha_actualizacion=timezone.now())
-
-        if anterior:
-            respuesta = Respuesta.objects.create(
-                consulta=consulta, modelo=anterior.modelo, texto_generado=anterior.texto_generado,
-                tiempo_respuesta=0.01, modismos_detectados=anterior.modismos_detectados)
-            previa = getattr(anterior, 'evaluacion', None)
-            evaluacion = Evaluacion.objects.create(
-                respuesta=respuesta,
-                bleu=previa.bleu if previa else 0,
-                rouge=previa.rouge if previa else 0,
-                bertscore=previa.bertscore if previa else 0,
-                observaciones='Respuesta recuperada de la base de conocimiento local')
-            HistorialInteraccion.objects.create(usuario=request.user, consulta=consulta, respuesta=respuesta)
-            return Response(self._response_data(consulta, respuesta, evaluacion, 'Base local aprendida'))
 
         # 2. Obtener o crear registro del modelo activo
         modelo_db, _ = ModeloIA.objects.get_or_create(
@@ -194,7 +191,7 @@ class HistorialGlobalAPIView(generics.ListAPIView):
 
 
 class ParametrosModeloAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [EsAdministrador]
 
     def get(self, request):
         modelo, _ = ModeloIA.objects.get_or_create(nombre_modelo='llama3')

@@ -1,11 +1,25 @@
-import os
 import time
+import re
 import requests
 from django.conf import settings
 from apps.modismos.models import Modismo
 from apps.evaluacion.services.evaluator import MetricasEvaluador
 
 class OllamaNLPService:
+    NORMALIZACIONES = {
+        'no seas malito': 'por favor',
+        'achachay': 'qué frío',
+        'chuchaqui': 'resaca',
+        'cachar': 'entender',
+        'cachas': 'entiendes',
+        'camellar': 'trabajar',
+        'camello': 'trabajo',
+        'jamar': 'comer',
+        'dar papaya': 'exponerse innecesariamente a un riesgo',
+        'ponte pilas': 'presta atención',
+        'ponte once': 'presta atención',
+    }
+
     def __init__(self):
         self.base_url = getattr(settings, 'OLLAMA_BASE_URL', 'http://ollama:11434')
         self.model = getattr(settings, 'OLLAMA_MODEL', 'llama3')
@@ -34,22 +48,22 @@ class OllamaNLPService:
 
     def construir_prompt_ecuatoriano(self, texto_usuario: str, modismos_detectados: list) -> str:
         """
-        Aplica técnicas de RAG neuro-simbólico e inyección de contexto cultural ecuatoriano.
+        Normaliza modismos ambiguos sin desviar al modelo de la consulta real.
         """
-        contexto = (
-            "Eres el Asistente Virtual PLN-EC, un sistema inteligente de procesamiento de lenguaje natural "
-            "desarrollado en la Universidad Politécnica Estatal del Carchi (UPEC) para entender y responder "
-            "en el dialecto y modismos del español ecuatoriano (Sierra, Costa, Amazonía y Carchi).\n"
-            "Tu personalidad es amigable, educada, respetuosa, clara y coherente con las expresiones tradicionales ecuatorianas.\n"
-        )
-
-        if modismos_detectados:
-            contexto += "\n--- CONTEXTO DIALECTAL IDENTIFICADO EN LA CONSULTA ---\n"
-            for m in modismos_detectados:
-                contexto += f"- Expresión: '{m['nombre']}' | Región: {m['region']} | Significado cultural: {m['significado']}\n"
-            contexto += "Debes interpretar la consulta considerando estos significados específicos de Ecuador y responder en concordancia.\n"
-
-        return contexto
+        texto_normalizado = texto_usuario
+        for modismo in modismos_detectados:
+            nombre = modismo['nombre'].replace('¡', '').replace('!', '').replace('¿', '').replace('?', '').strip().lower()
+            reemplazo = self.NORMALIZACIONES.get(nombre)
+            if reemplazo:
+                texto_normalizado = re.sub(
+                    re.escape(modismo['nombre']), reemplazo, texto_normalizado,
+                    flags=re.IGNORECASE
+                )
+                texto_normalizado = re.sub(
+                    re.escape(nombre), reemplazo, texto_normalizado,
+                    flags=re.IGNORECASE
+                )
+        return texto_normalizado
 
     def generar_texto(self, texto_usuario: str, temperatura=0.7, top_p=0.9, max_tokens=250, historial=None):
         """
@@ -57,23 +71,28 @@ class OllamaNLPService:
         """
         inicio = time.time()
         modismos_detectados = self.detectar_modismos(texto_usuario)
-        system_prompt = self.construir_prompt_ecuatoriano(texto_usuario, modismos_detectados)
+        consulta_normalizada = self.construir_prompt_ecuatoriano(texto_usuario, modismos_detectados)
 
-        historial_prompt = ''
+        mensajes = []
         if historial:
-            historial_prompt = "\n--- CONVERSACIÓN PREVIA ---\n" + "\n".join(
-                f"{'Usuario' if item['sender'] == 'user' else 'Asistente PLN-EC'}: {item['text']}"
-                for item in historial[-10:]
-            )
+            mensajes.extend({
+                'role': 'user' if item['sender'] == 'user' else 'assistant',
+                'content': item['text']
+            } for item in historial[-6:])
+
+        mensajes.append({'role': 'user', 'content': consulta_normalizada})
 
         payload = {
             "model": self.model,
-            "prompt": f"{system_prompt}{historial_prompt}\nUsuario: {texto_usuario}\nAsistente PLN-EC:",
+            "messages": mensajes,
             "stream": False,
+            "keep_alive": "24h",
             "options": {
                 "temperature": float(temperatura),
                 "top_p": float(top_p),
                 "num_predict": int(max_tokens),
+                "num_ctx": 2048,
+                "repeat_penalty": 1.1,
             }
         }
 
@@ -82,10 +101,12 @@ class OllamaNLPService:
 
         try:
             # La primera carga del modelo en CPU puede tardar más de un minuto.
-            resp = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=120)
+            resp = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=(5, 90))
             if resp.status_code == 200:
                 data = resp.json()
-                texto_generado = data.get('response', '').strip()
+                texto_generado = data.get('message', {}).get('content', '').strip()
+                if not texto_generado:
+                    raise ValueError('Ollama devolvió una respuesta vacía')
             else:
                 fuente_inferencia = "Motor de Respaldo Ecuatoriano"
                 texto_generado = self._generar_fallback(texto_usuario, modismos_detectados)

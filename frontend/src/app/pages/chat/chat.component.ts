@@ -37,7 +37,8 @@ import { ActivatedRoute, Router } from '@angular/router';
               <i class="bi bi-plus-lg"></i>
               <span class="hidden sm:inline">Nueva conversación</span>
             </button>
-            <button 
+            <button
+              *ngIf="isAdmin"
               (click)="showSettings = !showSettings" 
               class="px-3 py-1.5 rounded-lg bg-[#1e293b]/60 hover:bg-[#1e293b] text-xs text-sky-400 border border-[#334155] flex items-center gap-1.5 transition-colors">
               <i class="bi bi-sliders2"></i>
@@ -47,7 +48,7 @@ import { ActivatedRoute, Router } from '@angular/router';
         </header>
 
         <!-- Floating Parameters Settings Drawer (RF07) -->
-        <div *ngIf="showSettings" class="absolute top-18 right-8 w-80 p-5 rounded-2xl bg-[#131d31] border border-[#1e293b] shadow-2xl z-20 animate-in fade-in slide-in-from-top-4">
+        <div *ngIf="isAdmin && showSettings" class="absolute top-18 right-8 w-80 p-5 rounded-2xl bg-[#131d31] border border-[#1e293b] shadow-2xl z-20 animate-in fade-in slide-in-from-top-4">
           <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
             <h3 class="text-xs font-bold uppercase tracking-wider text-white">Control de Parámetros (RF07)</h3>
             <button (click)="showSettings = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
@@ -275,6 +276,10 @@ export class ChatComponent implements OnInit, AfterViewChecked {
 
   get userName(): string {
     return this.authService.currentUser()?.nombre || 'Usuario';
+  }
+
+  get isAdmin(): boolean {
+    return this.authService.isAdmin();
   }
 
   scrollToBottom(): void {

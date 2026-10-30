@@ -27,11 +27,12 @@ services:
       - ./ollama/setup_models.sh:/setup_models.sh:ro
     environment:
       OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_CONTEXT_LENGTH: 2048
     healthcheck:
-      test: [ "CMD", "ollama", "list" ]
+      test: [ "CMD-SHELL", "test -f /tmp/model-ready && ollama list >/dev/null" ]
       interval: 10s
       timeout: 5s
-      retries: 30
+      retries: 120
       start_period: 20s
 
   backend:
