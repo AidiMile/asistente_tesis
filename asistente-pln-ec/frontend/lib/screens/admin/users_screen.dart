@@ -66,7 +66,7 @@ class _S extends State<UsersScreen> {
                       ),
                       if (!isNew)
                         DropdownButtonFormField<String>(
-                            value: estado,
+                            initialValue: estado,
                             decoration: const InputDecoration(labelText: 'Estado'),
                             items: const [
                               DropdownMenuItem(value: 'Activo', child: Text('Activo')),
@@ -142,7 +142,9 @@ class _S extends State<UsersScreen> {
                             icon: const Icon(Icons.delete_outline),
                             onPressed: () async {
                               if (!await confirm(context,
-                                  'Se eliminará a ${u['nombre']} y todo su historial. Para conservar la auditoría use el interruptor de estado. ¿Continuar?')) return;
+                                  'Se eliminará a ${u['nombre']} y todo su historial. Para conservar la auditoría use el interruptor de estado. ¿Continuar?')) {
+                                return;
+                              }
                               if (!context.mounted) return;
                               final r = await guarded(context, () => _api.delete('/admin/users/${u['id_usuario']}'));
                               if (context.mounted && r == null) _load();
