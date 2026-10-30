@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/auth.dart';
+import 'core/chat_session.dart';
 import 'core/router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final auth = AuthState();
   await auth.restore();
-  runApp(ChangeNotifierProvider.value(value: auth, child: const App()));
+  final chatSession = ChatSession();
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: auth),
+        ChangeNotifierProvider.value(value: chatSession),
+      ],
+      child: const App(),
+    ),
+  );
 }
 
 class App extends StatefulWidget {
