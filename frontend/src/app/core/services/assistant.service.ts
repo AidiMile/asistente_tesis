@@ -9,7 +9,16 @@ export interface ChatMessage {
   text: string;
   timestamp: Date;
   modismos?: Array<{ nombre: string; region: string; significado: string }>;
-  metricas?: { bleu: number; rouge: number; bertscore: number; tiempo_respuesta: number };
+  es_error?: boolean;
+  metricas?: {
+    bleu?: number | null;
+    rouge?: number | null;
+    bertscore?: number | null;
+    tiempo_respuesta: number;
+    es_error?: boolean;
+    estado?: string;
+    motivo_error?: string;
+  };
 }
 
 @Injectable({ providedIn: 'root' })

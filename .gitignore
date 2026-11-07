@@ -1,18 +1,47 @@
+# Entornos y secretos
 .work/
 .env
+.env.*
+.env.bak
+!.env.example
+
+# Respaldos y temporales
+*.bak
+*.bak*
+*.bak_*
+*.backup
+*.tmp
+*.log
+
+# Python y Django
 __pycache__/
 *.py[cod]
+*.pyc
 .pytest_cache/
-backend/.venv/
-frontend/node_modules/
-frontend/dist/
-*.sqlite3
 .venv/
 venv/
-.env.*
-!.env.example
-node_modules/
-__pycache__/
-*.pyc
+backend/.venv/
+
+# Bases de datos y volcados locales
+*.sqlite3
+*.db
 asistente.db
+*.sql
+*.dump
+
+# Node y Angular
+node_modules/
+frontend/node_modules/
+frontend/dist/
 frontend/.angular/
+
+# Pruebas y benchmarks locales
+granite_eval_results.json
+*_eval_results.json
+asistente-pln-ec/
+
+# Editores y SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

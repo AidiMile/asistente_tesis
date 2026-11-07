@@ -46,7 +46,7 @@ class GenerarTextoRequestSerializer(serializers.Serializer):
     tipo_entrada = serializers.ChoiceField(choices=['Texto', 'Audio', 'Dictado por voz'], default='Texto')
     temperatura = serializers.FloatField(required=False, default=0.7, min_value=0.0, max_value=1.5)
     top_p = serializers.FloatField(required=False, default=0.9, min_value=0.0, max_value=1.0)
-    max_tokens = serializers.IntegerField(required=False, default=200, min_value=20, max_value=800)
+    max_tokens = serializers.IntegerField(required=False, default=250, min_value=20, max_value=800)
 
 
 class ParametroModeloSerializer(serializers.ModelSerializer):
@@ -103,17 +103,41 @@ class ConversacionDetalleSerializer(serializers.ModelSerializer):
             })
             for respuesta in consulta.respuestas.all():
                 evaluacion = getattr(respuesta, 'evaluacion', None)
+                texto_resp = respuesta.texto_generado or ''
+                obs_eval = (evaluacion.observaciones or '') if evaluacion else ''
+
+                es_fallida = bool(
+                    ('timeout' in obs_eval.lower() or 'respaldo upec' in obs_eval.lower()) or
+                    ('no pudo responder a tiempo' in texto_resp.lower() or 'tiempo de espera agotado' in texto_resp.lower())
+                )
+
+                if es_fallida:
+                    metricas_dict = {
+                        'bleu': None,
+                        'rouge': None,
+                        'bertscore': None,
+                        'tiempo_respuesta': float(respuesta.tiempo_respuesta),
+                        'es_error': True,
+                        'estado': 'fallida',
+                        'motivo_error': 'Tiempo de espera agotado'
+                    }
+                else:
+                    metricas_dict = {
+                        'bleu': float(evaluacion.bleu) if evaluacion else None,
+                        'rouge': float(evaluacion.rouge) if evaluacion else None,
+                        'bertscore': float(evaluacion.bertscore) if evaluacion else None,
+                        'tiempo_respuesta': float(respuesta.tiempo_respuesta),
+                        'es_error': False,
+                        'estado': 'exitosa'
+                    }
+
                 mensajes.append({
                     'id': respuesta.id_respuesta,
                     'sender': 'assistant',
                     'text': respuesta.texto_generado,
                     'timestamp': respuesta.fecha_respuesta,
                     'modismos': respuesta.modismos_detectados,
-                    'metricas': {
-                        'bleu': float(evaluacion.bleu),
-                        'rouge': float(evaluacion.rouge),
-                        'bertscore': float(evaluacion.bertscore),
-                        'tiempo_respuesta': float(respuesta.tiempo_respuesta),
-                    } if evaluacion else None,
+                    'es_error': es_fallida,
+                    'metricas': metricas_dict,
                 })
         return mensajes

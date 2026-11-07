@@ -3,33 +3,39 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../components/sidebar/sidebar.component';
 import { HttpClient } from '@angular/common/http';
+import { SidebarService } from '../../core/services/sidebar.service';
 
 @Component({
   selector: 'app-modismos',
   standalone: true,
   imports: [CommonModule, FormsModule, SidebarComponent],
   template: `
-    <div class="flex h-screen bg-[#0b0f19] text-slate-100 overflow-hidden">
+    <div class="flex h-screen bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden transition-colors duration-200">
       <app-sidebar></app-sidebar>
 
-      <main class="ml-64 flex-1 flex flex-col h-screen overflow-y-auto px-10 py-8 bg-[#0b0f19]">
+      <main
+        [ngClass]="sidebarService.isCollapsed() ? 'md:ml-16' : 'md:ml-64'"
+        class="flex-1 flex flex-col h-screen overflow-y-auto px-6 sm:px-10 pt-16 sm:pt-8 pb-8 bg-[var(--bg-main)] transition-all duration-300 ease-in-out">
         
         <!-- Header -->
-        <div class="flex items-center justify-between pb-6 border-b border-[#1e293b]/60 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[var(--border-color)] mb-6">
           <div>
-            <h1 class="text-xl font-bold text-white tracking-tight">Diccionario y Corpus Dialectal Ecuatoriano</h1>
-            <p class="text-xs text-slate-400 mt-1">Base de conocimiento lingüístico UPEC (Tablas 6 y 7 de la Tesis)</p>
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Diccionario y Corpus Dialectal Ecuatoriano</h1>
+              <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300 border border-amber-300/40 dark:border-amber-400/20">UPEC</span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Base de conocimiento lingüístico UPEC (Tablas 6 y 7 de la Tesis)</p>
           </div>
           <div class="flex items-center gap-2">
-            <span class="px-3 py-1.5 rounded-xl bg-sky-500/10 text-sky-400 text-xs border border-sky-500/20 font-mono">
+            <span class="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-sky-400 text-xs border border-emerald-500/20 dark:border-sky-500/20 font-mono font-medium">
               {{ modismosList.length }} Expresiones Indexadas
             </span>
           </div>
         </div>
 
         <!-- Filter Bar -->
-        <div class="flex items-center gap-4 mb-6">
-          <div class="relative flex-1">
+        <div class="flex flex-col sm:flex-row items-center gap-4 mb-6">
+          <div class="relative flex-1 w-full">
             <input 
               type="text" 
               [(ngModel)]="searchQuery" 
@@ -39,7 +45,7 @@ import { HttpClient } from '@angular/common/http';
             <i class="bi bi-search absolute left-4 top-3 text-slate-400"></i>
           </div>
 
-          <select [(ngModel)]="selectedRegion" class="input-field py-2.5 px-4 text-xs w-48">
+          <select [(ngModel)]="selectedRegion" class="input-field py-2.5 px-4 text-xs w-full sm:w-48">
             <option value="">Todas las regiones</option>
             <option value="Sierra">Sierra</option>
             <option value="Carchi">Carchi</option>
@@ -50,24 +56,24 @@ import { HttpClient } from '@angular/common/http';
 
         <!-- Modisms Grid / Table -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
-          <div *ngFor="let item of filteredModismos" class="p-5 rounded-2xl bg-[#131d31] border border-[#1e293b] hover:border-sky-500/40 transition-all shadow-md space-y-3">
+          <div *ngFor="let item of filteredModismos" class="p-5 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-emerald-500/40 dark:hover:border-sky-500/40 transition-all shadow-sm space-y-3">
             <div class="flex items-start justify-between">
               <div>
-                <h3 class="text-base font-bold text-sky-400 font-mono">{{ item.nombre_modismo }}</h3>
-                <span class="text-[11px] text-slate-400">{{ item.region }}</span>
+                <h3 class="text-base font-bold text-emerald-700 dark:text-sky-400 font-mono">{{ item.nombre_modismo }}</h3>
+                <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ item.region }}</span>
               </div>
-              <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 font-medium">
                 {{ item.estado || 'Activo' }}
               </span>
             </div>
 
-            <div class="text-xs text-slate-300 leading-relaxed bg-[#0b0f19]/60 p-3 rounded-xl border border-[#1e293b]/60">
-              <span class="text-slate-400 block text-[10px] uppercase font-semibold mb-1">Significado:</span>
+            <div class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+              <span class="text-slate-400 dark:text-slate-400 block text-[10px] uppercase font-bold mb-1">Significado:</span>
               <p>{{ getSignificado(item) }}</p>
             </div>
 
-            <div *ngIf="getEjemplo(item)" class="text-xs text-slate-400 italic bg-sky-950/20 p-2.5 rounded-xl border border-sky-900/30">
-              <span class="text-sky-400 font-normal not-italic text-[10px] block mb-0.5">Ejemplo de uso:</span>
+            <div *ngIf="getEjemplo(item)" class="text-xs text-slate-600 dark:text-slate-400 italic bg-amber-50/60 dark:bg-sky-950/20 p-2.5 rounded-xl border border-amber-200/60 dark:border-sky-900/30">
+              <span class="text-amber-800 dark:text-sky-400 font-semibold not-italic text-[10px] block mb-0.5">Ejemplo de uso:</span>
               "{{ getEjemplo(item) }}"
             </div>
           </div>
@@ -82,7 +88,10 @@ export class ModismosComponent implements OnInit {
   selectedRegion: string = '';
   modismosList: any[] = [];
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    public sidebarService: SidebarService
+  ) {}
 
   ngOnInit(): void {
     this.cargarModismos();

@@ -3,42 +3,45 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../../components/sidebar/sidebar.component';
 import { AuthService } from '../../core/services/auth.service';
+import { SidebarService } from '../../core/services/sidebar.service';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
   imports: [CommonModule, FormsModule, SidebarComponent],
   template: `
-    <div class="flex h-screen bg-[#0b0f19] text-slate-100 overflow-hidden">
+    <div class="flex h-screen bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden transition-colors duration-200">
       <app-sidebar></app-sidebar>
 
-      <main class="ml-64 flex-1 flex flex-col items-center justify-start h-screen overflow-y-auto px-10 py-12 bg-[#0b0f19]">
+      <main
+        [ngClass]="sidebarService.isCollapsed() ? 'md:ml-16' : 'md:ml-64'"
+        class="flex-1 flex flex-col items-center justify-start h-screen overflow-y-auto px-6 sm:px-10 pt-16 sm:pt-12 pb-12 bg-[var(--bg-main)] transition-all duration-300 ease-in-out">
         
         <div class="w-full max-w-xl space-y-8">
           
-          <!-- Avatar and Basic Info (Screenshot 4 exact layout) -->
+          <!-- Avatar and Basic Info -->
           <div class="flex flex-col items-center text-center">
-            <div class="w-24 h-24 rounded-full bg-[#132d4b] border-2 border-sky-500/50 text-sky-300 font-bold flex items-center justify-center text-3xl shadow-xl shadow-sky-500/20 mb-4">
+            <div class="w-24 h-24 rounded-full bg-emerald-100 text-emerald-800 border-2 border-emerald-500/50 dark:bg-sky-900/60 dark:text-sky-300 dark:border-sky-500/50 font-bold flex items-center justify-center text-3xl shadow-xl shadow-emerald-600/10 dark:shadow-sky-500/20 mb-4 transition-colors">
               {{ userInitial }}
             </div>
-            <h2 class="text-sm font-semibold text-slate-300">
-              &#64;{{ userTag }} · <span class="text-slate-400">{{ userEmail }}</span>
+            <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              &#64;{{ userTag }} · <span class="text-slate-500 dark:text-slate-400">{{ userEmail }}</span>
             </h2>
-            <div class="mt-2 inline-block px-3 py-1 rounded-full bg-[#1e293b] text-sky-400 text-xs font-medium border border-[#334155]">
+            <div class="mt-2 inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 dark:bg-slate-800 dark:text-sky-400 text-xs font-semibold border border-emerald-200 dark:border-slate-700">
               {{ userRole }}
             </div>
           </div>
 
           <!-- Alert notification -->
-          <div *ngIf="message" class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+          <div *ngIf="message" class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
             <i class="bi bi-check-circle-fill"></i>
             <span>{{ message }}</span>
           </div>
 
           <!-- Section 1: Update Name -->
-          <div class="bg-[#131d31] border border-[#1e293b] rounded-2xl p-6 space-y-4 shadow-lg">
+          <div class="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl p-6 space-y-4 shadow-sm transition-colors">
             <div>
-              <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Nombre</label>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Nombre completo</label>
               <input 
                 type="text" 
                 [(ngModel)]="nombre" 
@@ -55,9 +58,10 @@ import { AuthService } from '../../core/services/auth.service';
           </div>
 
           <!-- Section 2: Change Password -->
-          <div class="bg-[#131d31] border border-[#1e293b] rounded-2xl p-6 space-y-4 shadow-lg">
+          <div class="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl p-6 space-y-4 shadow-sm transition-colors">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">Seguridad de la cuenta</h3>
             <div>
-              <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Contraseña actual</label>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Contraseña actual</label>
               <input 
                 type="password" 
                 [(ngModel)]="oldPassword" 
@@ -67,7 +71,7 @@ import { AuthService } from '../../core/services/auth.service';
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Nueva contraseña</label>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Nueva contraseña</label>
               <input 
                 type="password" 
                 [(ngModel)]="newPassword" 
@@ -77,7 +81,7 @@ import { AuthService } from '../../core/services/auth.service';
             </div>
 
             <div class="flex justify-end pt-2">
-              <button (click)="cambiarPassword()" class="px-6 py-2.5 rounded-full bg-[#1e293b] hover:bg-[#334155] text-slate-200 text-xs font-semibold border border-[#334155] transition-colors">
+              <button (click)="cambiarPassword()" class="px-6 py-2.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-300 dark:border-slate-700 transition-colors">
                 Cambiar contraseña
               </button>
             </div>
@@ -95,7 +99,10 @@ export class ProfileComponent implements OnInit {
   newPassword: string = '';
   message: string = '';
 
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    public sidebarService: SidebarService
+  ) {}
 
   ngOnInit(): void {
     const user = this.authService.currentUser();

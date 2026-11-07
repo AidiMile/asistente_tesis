@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -47,9 +48,10 @@ class GenerarTextoAPIView(APIView):
             top_p = data['top_p']
             max_tokens = data['max_tokens']
         else:
-            temperatura = 0.2
+            # Parámetros equilibrados para propósito general (evitan respuestas truncadas en CPU)
+            temperatura = 0.6
             top_p = 0.9
-            max_tokens = 120
+            max_tokens = 250
 
         id_conversacion = data.get('id_conversacion')
         if id_conversacion:
@@ -66,10 +68,27 @@ class GenerarTextoAPIView(APIView):
         consultas_previas = (conversacion.consultas
                              .prefetch_related('respuestas')
                              .order_by('fecha_consulta'))
+        error_keywords = [
+            "no pudo responder a tiempo",
+            "tiempo de espera agotado",
+            "servicio en carga",
+            "error_motor",
+            "error_http",
+            "solicitud fallida"
+        ]
         for consulta_previa in consultas_previas:
-            historial_contexto.append({'sender': 'user', 'text': consulta_previa.texto_consulta})
-            for respuesta_previa in consulta_previa.respuestas.all():
-                historial_contexto.append({'sender': 'assistant', 'text': respuesta_previa.texto_generado})
+            respuestas = consulta_previa.respuestas.all()
+            if not respuestas:
+                continue
+            resp_valida = None
+            for r in respuestas:
+                txt = (r.texto_generado or "").strip()
+                if txt and not any(k in txt.lower() for k in error_keywords):
+                    resp_valida = txt
+                    break
+            if resp_valida:
+                historial_contexto.append({'sender': 'user', 'text': consulta_previa.texto_consulta.strip()})
+                historial_contexto.append({'sender': 'assistant', 'text': resp_valida})
 
         # 1. Guardar la consulta en PostgreSQL
         consulta = Consulta.objects.create(
@@ -80,13 +99,7 @@ class GenerarTextoAPIView(APIView):
         )
         Conversacion.objects.filter(pk=conversacion.pk).update(fecha_actualizacion=timezone.now())
 
-        # 2. Obtener o crear registro del modelo activo
-        modelo_db, _ = ModeloIA.objects.get_or_create(
-            nombre_modelo='llama3',
-            defaults={'version': '8b-instruct', 'proveedor': 'Ollama'}
-        )
-
-        # 3. Inferencia con motor Ollama + RAG dialectal ecuatoriano
+        # 2. Inferencia: base de conocimiento directa (si es definición) o motor Ollama
         nlp_service = OllamaNLPService()
         resultado = nlp_service.generar_texto(
             texto_usuario=texto,
@@ -95,6 +108,20 @@ class GenerarTextoAPIView(APIView):
             max_tokens=max_tokens,
             historial=historial_contexto
         )
+
+        # 3. Registrar el modelo correspondiente a la fuente de respuesta
+        if resultado.get('es_directa'):
+            modelo_db, _ = ModeloIA.objects.get_or_create(
+                nombre_modelo='base-conocimiento-upec',
+                defaults={'version': '1.0-corpus-dialectal', 'proveedor': 'PostgreSQL'}
+            )
+        else:
+            nombre_modelo_activo = getattr(settings, 'OLLAMA_MODEL', 'qwen2.5:1.5b')
+            version_modelo = '1.5b-instruct-q4_k_m' if 'qwen' in nombre_modelo_activo.lower() else '3b-dialectal-upec'
+            modelo_db, _ = ModeloIA.objects.get_or_create(
+                nombre_modelo=nombre_modelo_activo,
+                defaults={'version': version_modelo, 'proveedor': 'Ollama'}
+            )
 
         # 4. Guardar la respuesta generada
         respuesta = Respuesta.objects.create(
@@ -105,15 +132,20 @@ class GenerarTextoAPIView(APIView):
             modismos_detectados=resultado['modismos_detectados']
         )
 
-        # 5. Guardar la evaluación de calidad de la respuesta (BLEU, ROUGE, BERTScore)
-        metricas_data = resultado['metricas']
-        evaluacion = Evaluacion.objects.create(
-            respuesta=respuesta,
-            bleu=metricas_data['bleu'],
-            rouge=metricas_data['rouge'],
-            bertscore=metricas_data['bertscore'],
-            observaciones=f"Inferencia vía {resultado['fuente']}"
-        )
+        # 5. Guardar evaluación lingüística únicamente cuando la inferencia fue vía LLM y exitosa
+        es_error = bool(resultado.get('es_error'))
+        es_directa = bool(resultado.get('es_directa'))
+        evaluacion = None
+        if not es_error and not es_directa:
+            metricas_data = resultado.get('metricas', {})
+            if metricas_data.get('bleu') is not None or metricas_data.get('bertscore') is not None:
+                evaluacion = Evaluacion.objects.create(
+                    respuesta=respuesta,
+                    bleu=metricas_data.get('bleu'),
+                    rouge=metricas_data.get('rouge'),
+                    bertscore=metricas_data.get('bertscore'),
+                    observaciones=f"Inferencia vía {resultado['fuente']}"
+                )
 
         # 6. Registrar en el historial de interacciones
         HistorialInteraccion.objects.create(
@@ -122,11 +154,30 @@ class GenerarTextoAPIView(APIView):
             respuesta=respuesta
         )
 
-        return Response(self._response_data(consulta, respuesta, evaluacion, resultado['fuente']),
-                        status=status.HTTP_200_OK)
+        motivo_error = resultado.get('metricas', {}).get('motivo_error')
+        return Response(
+            self._response_data(consulta, respuesta, evaluacion, resultado['fuente'], es_error, motivo_error),
+            status=status.HTTP_200_OK
+        )
 
     @staticmethod
-    def _response_data(consulta, respuesta, evaluacion, fuente):
+    def _response_data(consulta, respuesta, evaluacion, fuente, es_error=False, motivo_error=None):
+        metricas = {
+            'tiempo_respuesta': float(respuesta.tiempo_respuesta),
+            'es_error': es_error,
+        }
+        if es_error:
+            metricas['bleu'] = None
+            metricas['rouge'] = None
+            metricas['bertscore'] = None
+            metricas['estado'] = 'fallida'
+            metricas['motivo_error'] = motivo_error or 'Tiempo de espera agotado'
+        else:
+            metricas['bleu'] = float(evaluacion.bleu) if evaluacion else None
+            metricas['rouge'] = float(evaluacion.rouge) if evaluacion else None
+            metricas['bertscore'] = float(evaluacion.bertscore) if evaluacion else None
+            metricas['estado'] = 'exitosa'
+
         return {
             'id_consulta': consulta.id_consulta,
             'id_conversacion': consulta.conversacion_id,
@@ -135,12 +186,8 @@ class GenerarTextoAPIView(APIView):
             'tiempo_respuesta': float(respuesta.tiempo_respuesta),
             'modismos_detectados': respuesta.modismos_detectados,
             'fuente': fuente,
-            'metricas': {
-                'bleu': float(evaluacion.bleu),
-                'rouge': float(evaluacion.rouge),
-                'bertscore': float(evaluacion.bertscore),
-                'tiempo_respuesta': float(respuesta.tiempo_respuesta)
-            }
+            'es_error': es_error,
+            'metricas': metricas
         }
 
 
@@ -194,13 +241,15 @@ class ParametrosModeloAPIView(APIView):
     permission_classes = [EsAdministrador]
 
     def get(self, request):
-        modelo, _ = ModeloIA.objects.get_or_create(nombre_modelo='llama3')
+        nombre_modelo_activo = getattr(settings, 'OLLAMA_MODEL', 'asistente-ecuatoriano')
+        modelo, _ = ModeloIA.objects.get_or_create(nombre_modelo=nombre_modelo_activo)
         param, _ = ParametroModelo.objects.get_or_create(modelo=modelo)
         serializer = ParametroModeloSerializer(param)
         return Response(serializer.data)
 
     def put(self, request):
-        modelo, _ = ModeloIA.objects.get_or_create(nombre_modelo='llama3')
+        nombre_modelo_activo = getattr(settings, 'OLLAMA_MODEL', 'asistente-ecuatoriano')
+        modelo, _ = ModeloIA.objects.get_or_create(nombre_modelo=nombre_modelo_activo)
         param, _ = ParametroModelo.objects.get_or_create(modelo=modelo)
         serializer = ParametroModeloSerializer(param, data=request.data, partial=True)
         if serializer.is_valid():
