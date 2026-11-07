@@ -13,4 +13,5 @@ urlpatterns = [
     path('api/modismos/', include('apps.modismos.urls')),
     path('api/asistente/', include('apps.asistente.urls')),
     path('api/evaluacion/', include('apps.evaluacion.urls')),
+    path('api/admin/', include('apps.evaluacion.admin_urls')),
 ]

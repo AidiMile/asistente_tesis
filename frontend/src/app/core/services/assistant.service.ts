@@ -67,4 +67,20 @@ export class AssistantService {
   getMetricasResumen(): Observable<any> {
     return this.http.get<any>('/api/evaluacion/resumen/', { headers: this.getHeaders() });
   }
+
+  getAdminStats(): Observable<any> {
+    return this.http.get<any>('/api/admin/stats/', { headers: this.getHeaders() });
+  }
+
+  getAdminEvaluations(limit: number = 30, skip: number = 0): Observable<any[]> {
+    return this.http.get<any[]>(`/api/admin/metrics/evaluations/?limit=${limit}&skip=${skip}`, { headers: this.getHeaders() });
+  }
+
+  evaluarRespuestaManual(idRespuesta: number, textoReferencia: string, guardar: boolean = false): Observable<any> {
+    return this.http.post<any>('/api/admin/metrics/evaluate/', {
+      id_respuesta: idRespuesta,
+      texto_referencia: textoReferencia,
+      guardar: guardar
+    }, { headers: this.getHeaders() });
+  }
 }
