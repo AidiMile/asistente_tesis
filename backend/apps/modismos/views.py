@@ -2,11 +2,12 @@ from rest_framework import generics, permissions, filters
 from django.db.models import Q
 from .models import Modismo
 from .serializers import ModismoSerializer
+from apps.authentication.permissions import EsAdministradorOEsLectura
 
 class ModismoListCreateView(generics.ListCreateAPIView):
     queryset = Modismo.objects.prefetch_related('significados', 'ejemplos').all()
     serializer_class = ModismoSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [EsAdministradorOEsLectura]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nombre_modismo', 'descripcion', 'region', 'significados__significado']
 
@@ -28,4 +29,4 @@ class ModismoListCreateView(generics.ListCreateAPIView):
 class ModismoDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Modismo.objects.prefetch_related('significados', 'ejemplos').all()
     serializer_class = ModismoSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [EsAdministradorOEsLectura]

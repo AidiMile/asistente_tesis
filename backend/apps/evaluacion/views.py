@@ -5,12 +5,14 @@ from django.db.models import Avg, Count
 from .models import Evaluacion
 from apps.asistente.models import Consulta, Respuesta
 from apps.modismos.models import Modismo
+from apps.authentication.permissions import EsAdministrador
 
 class ResumenMetricasAPIView(APIView):
     """
     Entrega métricas estadísticas agregadas para los gráficos del Dashboard (BLEU, ROUGE, Latencia).
+    Acceso exclusivo para administradores.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, EsAdministrador]
 
     def get(self, request):
         stats = Evaluacion.objects.aggregate(

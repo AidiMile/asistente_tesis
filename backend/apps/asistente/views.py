@@ -20,16 +20,7 @@ from .serializers import (
 from .services.ollama_client import OllamaNLPService
 
 
-def es_administrador(user):
-    """Valida el rol en el servidor; nunca confía en lo que muestre el frontend."""
-    return getattr(getattr(user, 'perfil', None), 'rol', None) == 'Administrador'
-
-
-class EsAdministrador(permissions.BasePermission):
-    message = 'Solo el administrador puede gestionar los parámetros del modelo.'
-
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and es_administrador(request.user))
+from apps.authentication.permissions import EsAdministrador, es_administrador
 
 class GenerarTextoAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -228,7 +219,7 @@ class HistorialUsuarioAPIView(generics.ListAPIView):
 
 class HistorialGlobalAPIView(generics.ListAPIView):
     serializer_class = HistorialInteraccionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, EsAdministrador]
 
     def get_queryset(self):
         # Permite ver todo el historial a docentes o administradores
