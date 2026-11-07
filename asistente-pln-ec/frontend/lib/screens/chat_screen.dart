@@ -35,10 +35,9 @@ class _S extends State<ChatScreen> {
   final _rec = AudioRecorder();
   bool _busy = false, _listening = false, _recording = false, _dictated = false;
 
-  int? _continuedHistoryId;
-  String? _continuedSummary;
-  int _lastNewChatTrigger = 0;
-  Map<String, dynamic>? _lastActiveItem;
+  int? _loadedChatId;
+  int _loadToken = 0;
+  ChatSession? _session;
 
   Api get _api => context.read<AuthState>().api;
 
@@ -46,7 +45,23 @@ class _S extends State<ChatScreen> {
   void initState() {
     super.initState();
     if (widget.initialItem != null) {
-      _initFromItem(widget.initialItem);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.read<ChatSession>().selectChat(widget.initialItem!);
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final session = context.read<ChatSession>();
+    if (_session != session) {
+      _session?.removeListener(_onSessionChanged);
+      _session = session;
+      _session?.addListener(_onSessionChanged);
+      _syncWithSession();
     }
   }
 
@@ -54,65 +69,105 @@ class _S extends State<ChatScreen> {
   void didUpdateWidget(ChatScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.initialItem != oldWidget.initialItem && widget.initialItem != null) {
-      _initFromItem(widget.initialItem);
+      context.read<ChatSession>().selectChat(widget.initialItem!);
     }
   }
 
-  void _initFromItem(Map<String, dynamic>? item) async {
-    if (item != null) {
+  void _onSessionChanged() {
+    if (!mounted) return;
+    _syncWithSession();
+  }
+
+  void _syncWithSession() {
+    final session = _session;
+    if (session == null) return;
+
+    final targetId = session.currentChatId;
+    if (targetId == null) {
+      // Estado de Nuevo Chat: invalidar cargas asíncronas y limpiar pantalla
+      if (_loadedChatId != null || _msgs.isNotEmpty) {
+        _loadToken++;
+        setState(() {
+          _loadedChatId = null;
+          _msgs.clear();
+          _ctl.clear();
+          _busy = false;
+        });
+      }
+    } else if (targetId != _loadedChatId) {
+      // Se seleccionó una conversación diferente: cargar su detalle
+      _loadConversation(targetId, session.activeItem);
+    }
+  }
+
+  Future<void> _loadConversation(int id, [Map<String, dynamic>? fallbackItem]) async {
+    final int thisToken = ++_loadToken;
+
+    setState(() {
+      _busy = true;
       _msgs.clear();
-      final id = item['id_conversacion'] ?? item['id_historial'];
-      _continuedHistoryId = id;
-      _continuedSummary = item['titulo'] ?? item['consulta'];
-      final rawMsgs = item['mensajes'] as List?;
-      if (rawMsgs != null && rawMsgs.isNotEmpty) {
-        for (final m in rawMsgs) {
+    });
+
+    try {
+      final det = await _api.get('/asistente/conversaciones/$id/');
+      // Evitar que respuestas asíncronas restauren la conversación si el usuario canceló o cambió
+      if (!mounted || thisToken != _loadToken || _session?.currentChatId != id) {
+        return;
+      }
+
+      if (det is Map && det['mensajes'] is List) {
+        final List msgs = det['mensajes'] as List;
+        final loadedMsgs = <_Msg>[];
+        for (final m in msgs) {
           final isMine = (m['role'] ?? m['sender']) == 'user';
           final content = (m['content'] ?? m['text'] ?? '').toString();
           if (content.isNotEmpty) {
-            _msgs.add(_Msg(isMine, content, meta: isMine ? null : Map<String, dynamic>.from(m)));
+            loadedMsgs.add(_Msg(isMine, content, meta: isMine ? null : Map<String, dynamic>.from(m as Map)));
           }
         }
-      } else if (id != null) {
-        // Cargar mensajes de la conversación desde Django: /api/asistente/conversaciones/<id>/
-        try {
-          final det = await _api.get('/asistente/conversaciones/$id/');
-          if (mounted && det is Map && det['mensajes'] is List) {
-            _msgs.clear();
-            for (final m in (det['mensajes'] as List)) {
-              final isMine = m['sender'] == 'user';
-              final content = (m['text'] ?? '').toString();
-              if (content.isNotEmpty) {
-                _msgs.add(_Msg(isMine, content, meta: isMine ? null : Map<String, dynamic>.from(m)));
-              }
-            }
-          }
-        } catch (_) {
-          if (item['consulta'] != null) {
-            _msgs.add(_Msg(true, item['consulta'], input: item['tipo_entrada']));
-          }
-          if (item['respuesta'] != null || item['texto_generado'] != null) {
-            _msgs.add(_Msg(false, (item['texto_generado'] ?? item['respuesta']).toString(), meta: item));
-          }
-        }
-      } else {
-        if (item['consulta'] != null) {
-          _msgs.add(_Msg(true, item['consulta'], input: item['tipo_entrada']));
-        }
-        if (item['respuesta'] != null || item['texto_generado'] != null) {
-          _msgs.add(_Msg(false, (item['texto_generado'] ?? item['respuesta']).toString(), meta: item));
-        }
+        setState(() {
+          _msgs.clear();
+          _msgs.addAll(loadedMsgs);
+          _loadedChatId = id;
+        });
+        _toBottom();
       }
-      _toBottom();
+    } catch (_) {
+      if (!mounted || thisToken != _loadToken || _session?.currentChatId != id) {
+        return;
+      }
+      // Fallback con datos locales si la conexión falla
+      if (fallbackItem != null) {
+        final loadedMsgs = <_Msg>[];
+        if (fallbackItem['consulta'] != null) {
+          loadedMsgs.add(_Msg(true, fallbackItem['consulta'].toString(), input: fallbackItem['tipo_entrada']?.toString()));
+        }
+        if (fallbackItem['respuesta'] != null || fallbackItem['texto_generado'] != null) {
+          loadedMsgs.add(_Msg(false, (fallbackItem['texto_generado'] ?? fallbackItem['respuesta']).toString(), meta: fallbackItem));
+        }
+        setState(() {
+          _msgs.clear();
+          _msgs.addAll(loadedMsgs);
+          _loadedChatId = id;
+        });
+        _toBottom();
+      }
+    } finally {
+      if (mounted && thisToken == _loadToken) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   void _startNewChat() {
+    _loadToken++;
+    _ctl.clear();
     setState(() {
+      _loadedChatId = null;
       _msgs.clear();
-      _continuedHistoryId = null;
-      _continuedSummary = null;
-      _ctl.clear();
+      _busy = false;
+      _listening = false;
+      _recording = false;
     });
     context.read<ChatSession>().newChat();
   }
@@ -134,7 +189,7 @@ class _S extends State<ChatScreen> {
     if (text.isEmpty || _busy) return;
     final tipo = _dictated ? 'Dictado por voz' : 'Texto';
     final chatSession = context.read<ChatSession>();
-    final int? currentChatId = chatSession.currentChatId ?? _continuedHistoryId;
+    final int? currentChatId = chatSession.currentChatId;
 
     setState(() {
       _msgs.add(_Msg(true, text, input: _dictated ? 'dictado' : 'texto'));
@@ -152,18 +207,21 @@ class _S extends State<ChatScreen> {
       };
       final r = await _api.post('/asistente/generar/', body: body);
       final map = Map<String, dynamic>.from(r);
-      _addReply(map);
       if (mounted) {
+        _addReply(map);
         final replyText = (map['texto_generado'] ?? map['respuesta'] ?? '').toString();
+        final int? newId = map['id_conversacion'] ?? map['id_historial'] ?? currentChatId;
+        _loadedChatId = newId;
         chatSession.notifyMessageSent(map, text, replyText);
-        _continuedHistoryId = chatSession.currentChatId;
-        _continuedSummary = text;
       }
     } catch (e) {
-      _msgs.add(_Msg(false, '⚠ $e'));
+      if (mounted) {
+        _msgs.add(_Msg(false, '⚠ $e'));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+      _toBottom();
     }
-    if (mounted) setState(() => _busy = false);
-    _toBottom();
   }
 
   Future<void> _toggleDictation() async {
@@ -201,8 +259,9 @@ class _S extends State<ChatScreen> {
         _msgs.add(_Msg(true, '🎤 Grabación de voz enviada', input: 'audio'));
       });
       try {
+        if (!mounted) return;
         final chatSession = context.read<ChatSession>();
-        final int? currentChatId = chatSession.currentChatId ?? _continuedHistoryId;
+        final int? currentChatId = chatSession.currentChatId;
         final bytes = kIsWeb ? (await http.get(Uri.parse(path!))).bodyBytes : await File(path!).readAsBytes();
         final r = await _api.upload(
           '/asistente/transcribir-audio/',
@@ -237,6 +296,7 @@ class _S extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _session?.removeListener(_onSessionChanged);
     _rec.dispose();
     _speech.cancel();
     _ctl.dispose();
@@ -411,34 +471,18 @@ class _S extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
     final chatSession = context.watch<ChatSession>();
-
-    // Sincronizar con eventos de nuevo chat o selección de chat desde la barra lateral
-    if (chatSession.newChatTrigger != _lastNewChatTrigger) {
-      _lastNewChatTrigger = chatSession.newChatTrigger;
-      _lastActiveItem = null;
-      _msgs.clear();
-      _continuedHistoryId = null;
-      _continuedSummary = null;
-      _ctl.clear();
-    } else if (chatSession.activeItem != _lastActiveItem && chatSession.activeItem != null) {
-      _lastActiveItem = chatSession.activeItem;
-      _initFromItem(chatSession.activeItem);
-    } else if (chatSession.currentChatId == null && _continuedHistoryId != null) {
-      _lastActiveItem = null;
-      _msgs.clear();
-      _continuedHistoryId = null;
-      _continuedSummary = null;
-      _ctl.clear();
-    }
-
     final userName = auth.user?['nombre'] ?? '';
+
+    final currentId = chatSession.currentChatId;
+    final activeSummary = chatSession.activeItem?['consulta'] ?? chatSession.activeItem?['titulo'];
+    final bool isContinuing = currentId != null;
 
     return Container(
       color: const Color(0xFFF7FAF9),
       child: Column(
         children: [
           // Banner indicador si se está continuando una conversación previa
-          if (_continuedSummary != null)
+          if (isContinuing)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: const Color(0xFFE6F4F1),
@@ -448,7 +492,7 @@ class _S extends State<ChatScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Continuando conversación: $_continuedSummary',
+                      'Continuando conversación: ${activeSummary ?? '#$currentId'}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF075E54)),
@@ -521,7 +565,7 @@ class _S extends State<ChatScreen> {
                           onChanged: (_) => _dictated = _dictated && _listening,
                           onSubmitted: (_) => _send(),
                           decoration: InputDecoration(
-                            hintText: _continuedSummary != null ? 'Continuar la conversación...' : 'Escribe tu consulta...',
+                            hintText: isContinuing ? 'Continuar la conversación...' : 'Escribe tu consulta...',
                             hintStyle: const TextStyle(color: Color(0xFFA0AEC0)),
                             filled: false,
                             border: InputBorder.none,

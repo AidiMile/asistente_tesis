@@ -38,10 +38,12 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = context.read<AuthState>();
+      final chatSession = context.read<ChatSession>();
       if (!auth.isAdmin && auth.loggedIn) {
-        context.read<ChatSession>().fetchHistory(auth.api);
+        await chatSession.fetchHistory(auth.api);
+        await chatSession.restoreActiveChat(auth.api);
       }
     });
   }
@@ -186,7 +188,7 @@ class _AppShellState extends State<AppShell> {
               children: [
                 Icon(Icons.memory, size: 18, color: Color(0xFF075E54)),
                 SizedBox(width: 8),
-                Text('Llama 3 (Ollama Local) - PLN Español Ecuador'),
+                Text('Qwen 2.5 1.5B (Ollama Local) - PLN Español Ecuador'),
               ],
             ),
             const SizedBox(height: 12),
@@ -299,8 +301,8 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  // ---- BARRA LATERAL PARA USUARIO NORMAL (Estilo DeepSeek, colores PLN-EC) ----
-  Widget _buildUserSidebar(AuthState auth, ChatSession chatSession) {
+  // ---- BARRA LATERAL PARA USUARIO NORMAL ----
+  Widget _buildUserSidebar(AuthState auth, ChatSession chatSession, {bool isDrawer = false}) {
     final grouped = _groupHistory(chatSession.historyItems);
     return Container(
       width: 260,
@@ -333,7 +335,7 @@ class _AppShellState extends State<AppShell> {
             ),
           ),
 
-          // Botón grande "+ Nuevo Chat" (verde oscuro)
+          // Botón "+ Nuevo Chat"
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: SizedBox(
@@ -348,6 +350,9 @@ class _AppShellState extends State<AppShell> {
                   elevation: 0,
                 ),
                 onPressed: () {
+                  if (isDrawer && Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
                   chatSession.newChat();
                   if (widget.location != '/chat') context.go('/chat');
                 },
@@ -357,7 +362,7 @@ class _AppShellState extends State<AppShell> {
 
           const SizedBox(height: 8),
 
-          // Lista de historial de conversaciones agrupadas por fecha (Hoy, Ayer, 7 días)
+          // Lista de historial de conversaciones agrupadas por fecha
           Expanded(
             child: chatSession.loadingHistory && chatSession.historyItems.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -396,6 +401,9 @@ class _AppShellState extends State<AppShell> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(10),
                                     onTap: () {
+                                      if (isDrawer && Navigator.of(context).canPop()) {
+                                        Navigator.of(context).pop();
+                                      }
                                       chatSession.selectChat(item);
                                       if (widget.location != '/chat') {
                                         context.go('/chat', extra: item);
@@ -463,7 +471,7 @@ class _AppShellState extends State<AppShell> {
 
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-          // Pie del sidebar: Foto de perfil y nombre del usuario con menú hacia arriba
+          // Pie del sidebar: Perfil y configuración
           Padding(
             padding: const EdgeInsets.all(12),
             child: _buildProfileCard(auth),
@@ -473,8 +481,8 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  // ---- BARRA LATERAL PARA ADMINISTRADOR (Menú original intacto, sin flecha de salir) ----
-  Widget _buildAdminSidebar(AuthState auth) {
+  // ---- BARRA LATERAL PARA ADMINISTRADOR ----
+  Widget _buildAdminSidebar(AuthState auth, {bool isDrawer = false}) {
     return Container(
       width: 240,
       decoration: const BoxDecoration(
@@ -532,7 +540,12 @@ class _AppShellState extends State<AppShell> {
                             color: selected ? const Color(0xFF075E54) : const Color(0xFF2D3748),
                           ),
                         ),
-                        onTap: () => context.go(d.path),
+                        onTap: () {
+                          if (isDrawer && Navigator.of(context).canPop()) {
+                            Navigator.of(context).pop();
+                          }
+                          context.go(d.path);
+                        },
                       ),
                     );
                   }),
@@ -543,7 +556,7 @@ class _AppShellState extends State<AppShell> {
 
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-          // Pie del sidebar: Foto y nombre del Administrador (reemplazó el botón de salida)
+          // Pie del sidebar: Perfil del Administrador
           Padding(
             padding: const EdgeInsets.all(12),
             child: _buildProfileCard(auth),
@@ -564,9 +577,9 @@ class _AppShellState extends State<AppShell> {
         body: Row(
           children: [
             if (auth.isAdmin)
-              _buildAdminSidebar(auth)
+              _buildAdminSidebar(auth, isDrawer: false)
             else
-              _buildUserSidebar(auth, chatSession),
+              _buildUserSidebar(auth, chatSession, isDrawer: false),
             Expanded(child: widget.child),
           ],
         ),
@@ -586,8 +599,8 @@ class _AppShellState extends State<AppShell> {
       drawer: Drawer(
         child: SafeArea(
           child: auth.isAdmin
-              ? _buildAdminSidebar(auth)
-              : _buildUserSidebar(auth, chatSession),
+              ? _buildAdminSidebar(auth, isDrawer: true)
+              : _buildUserSidebar(auth, chatSession, isDrawer: true),
         ),
       ),
       body: widget.child,
