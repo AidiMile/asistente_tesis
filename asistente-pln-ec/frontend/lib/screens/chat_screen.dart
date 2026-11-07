@@ -1,5 +1,5 @@
-import 'dart:io' show File;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -23,7 +23,6 @@ class _Msg {
 class ChatScreen extends StatefulWidget {
   final Map<String, dynamic>? initialItem;
   const ChatScreen({super.key, this.initialItem});
-
   @override
   State<ChatScreen> createState() => _S();
 }
@@ -59,27 +58,49 @@ class _S extends State<ChatScreen> {
     }
   }
 
-  void _initFromItem(Map<String, dynamic>? item) {
+  void _initFromItem(Map<String, dynamic>? item) async {
     if (item != null) {
       _msgs.clear();
-      final id = item['id_historial'];
+      final id = item['id_conversacion'] ?? item['id_historial'];
       _continuedHistoryId = id;
-      _continuedSummary = item['consulta'];
+      _continuedSummary = item['titulo'] ?? item['consulta'];
       final rawMsgs = item['mensajes'] as List?;
       if (rawMsgs != null && rawMsgs.isNotEmpty) {
         for (final m in rawMsgs) {
-          final isMine = (m['role'] ?? '') == 'user';
-          final content = m['content'] ?? '';
+          final isMine = (m['role'] ?? m['sender']) == 'user';
+          final content = (m['content'] ?? m['text'] ?? '').toString();
           if (content.isNotEmpty) {
-            _msgs.add(_Msg(isMine, content));
+            _msgs.add(_Msg(isMine, content, meta: isMine ? null : Map<String, dynamic>.from(m)));
+          }
+        }
+      } else if (id != null) {
+        // Cargar mensajes de la conversación desde Django: /api/asistente/conversaciones/<id>/
+        try {
+          final det = await _api.get('/asistente/conversaciones/$id/');
+          if (mounted && det is Map && det['mensajes'] is List) {
+            _msgs.clear();
+            for (final m in (det['mensajes'] as List)) {
+              final isMine = m['sender'] == 'user';
+              final content = (m['text'] ?? '').toString();
+              if (content.isNotEmpty) {
+                _msgs.add(_Msg(isMine, content, meta: isMine ? null : Map<String, dynamic>.from(m)));
+              }
+            }
+          }
+        } catch (_) {
+          if (item['consulta'] != null) {
+            _msgs.add(_Msg(true, item['consulta'], input: item['tipo_entrada']));
+          }
+          if (item['respuesta'] != null || item['texto_generado'] != null) {
+            _msgs.add(_Msg(false, (item['texto_generado'] ?? item['respuesta']).toString(), meta: item));
           }
         }
       } else {
         if (item['consulta'] != null) {
           _msgs.add(_Msg(true, item['consulta'], input: item['tipo_entrada']));
         }
-        if (item['respuesta'] != null) {
-          _msgs.add(_Msg(false, item['respuesta'], meta: item));
+        if (item['respuesta'] != null || item['texto_generado'] != null) {
+          _msgs.add(_Msg(false, (item['texto_generado'] ?? item['respuesta']).toString(), meta: item));
         }
       }
       _toBottom();
@@ -96,19 +117,6 @@ class _S extends State<ChatScreen> {
     context.read<ChatSession>().newChat();
   }
 
-  List<Map<String, String>> _buildContext() {
-    final ctx = <Map<String, String>>[];
-    for (final m in _msgs) {
-      if (m.text.isNotEmpty && !m.text.startsWith('⚠')) {
-        ctx.add({
-          'role': m.mine ? 'user' : 'assistant',
-          'content': m.text,
-        });
-      }
-    }
-    return ctx;
-  }
-
   void _toBottom() => WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scroll.hasClients) {
           _scroll.animateTo(_scroll.position.maxScrollExtent + 200,
@@ -117,19 +125,19 @@ class _S extends State<ChatScreen> {
       });
 
   void _addReply(Json r) {
-    _msgs.add(_Msg(false, r['respuesta'], meta: r));
+    final replyText = (r['texto_generado'] ?? r['respuesta'] ?? '').toString();
+    _msgs.add(_Msg(false, replyText, meta: r));
   }
 
   Future<void> _send([String? customText]) async {
     final text = (customText ?? _ctl.text).trim();
     if (text.isEmpty || _busy) return;
-    final tipo = _dictated ? 'dictado' : 'texto';
-    final currentContext = _buildContext();
+    final tipo = _dictated ? 'Dictado por voz' : 'Texto';
     final chatSession = context.read<ChatSession>();
     final int? currentChatId = chatSession.currentChatId ?? _continuedHistoryId;
 
     setState(() {
-      _msgs.add(_Msg(true, text, input: tipo));
+      _msgs.add(_Msg(true, text, input: _dictated ? 'dictado' : 'texto'));
       _busy = true;
       _ctl.clear();
       _dictated = false;
@@ -140,14 +148,13 @@ class _S extends State<ChatScreen> {
       final body = {
         'texto': text,
         'tipo_entrada': tipo,
-        if (currentChatId != null) 'id_historial_origen': currentChatId,
-        if (currentContext.isNotEmpty) 'historial_contexto': currentContext,
+        if (currentChatId != null) 'id_conversacion': currentChatId,
       };
-      final r = await _api.post('/queries', body: body);
+      final r = await _api.post('/asistente/generar/', body: body);
       final map = Map<String, dynamic>.from(r);
       _addReply(map);
       if (mounted) {
-        final replyText = map['respuesta'] ?? '';
+        final replyText = (map['texto_generado'] ?? map['respuesta'] ?? '').toString();
         chatSession.notifyMessageSent(map, text, replyText);
         _continuedHistoryId = chatSession.currentChatId;
         _continuedSummary = text;
@@ -169,24 +176,17 @@ class _S extends State<ChatScreen> {
       if (s == 'done' || s == 'notListening') {
         if (mounted) setState(() => _listening = false);
       }
-    }, onError: (_) {
-      if (mounted) setState(() => _listening = false);
     });
     if (!ok) {
-      if (mounted) snack(context, 'El dictado por voz no está disponible en este dispositivo/navegador', error: true);
+      if (mounted) snack(context, 'Dictado no disponible en este dispositivo', error: true);
       return;
     }
-    final locales = await _speech.locales();
-    final es = locales.where((l) => l.localeId.toLowerCase().startsWith('es')).toList();
-    final loc = es.firstWhere((l) => l.localeId.toLowerCase().replaceAll('-', '_') == 'es_ec',
-        orElse: () => es.isNotEmpty ? es.first : locales.first);
     setState(() => _listening = true);
     await _speech.listen(
-        localeId: loc.localeId,
+        localeId: 'es_EC',
         onResult: (r) {
           setState(() {
             _ctl.text = r.recognizedWords;
-            _ctl.selection = TextSelection.collapsed(offset: _ctl.text.length);
             _dictated = true;
           });
         });
@@ -198,37 +198,31 @@ class _S extends State<ChatScreen> {
       setState(() {
         _recording = false;
         _busy = true;
-        _msgs.add(_Msg(true, '🎤 Mensaje de voz', input: 'audio'));
+        _msgs.add(_Msg(true, '🎤 Grabación de voz enviada', input: 'audio'));
       });
       try {
         final chatSession = context.read<ChatSession>();
         final int? currentChatId = chatSession.currentChatId ?? _continuedHistoryId;
         final bytes = kIsWeb ? (await http.get(Uri.parse(path!))).bodyBytes : await File(path!).readAsBytes();
         final r = await _api.upload(
-          '/queries/audio',
+          '/asistente/transcribir-audio/',
           bytes,
           'audio.wav',
           fields: {
-            if (currentChatId != null) 'id_historial_origen': currentChatId.toString(),
+            if (currentChatId != null) 'id_conversacion': currentChatId.toString(),
           },
         );
         final m = Map<String, dynamic>.from(r);
-        final userQuery = m['texto_consulta'] ?? 'Mensaje de voz';
+        final userQuery = (m['texto_transcrito'] ?? m['texto_consulta'] ?? 'Consulta de voz').toString();
         setState(() {
           _msgs.removeLast();
-          _msgs.add(_Msg(true, userQuery, input: 'audio'));
+          _busy = false;
         });
-        _addReply(m);
-        if (mounted) {
-          final replyText = m['respuesta'] ?? '';
-          chatSession.notifyMessageSent(m, userQuery, replyText);
-          _continuedHistoryId = chatSession.currentChatId;
-          _continuedSummary = userQuery;
-        }
+        await _send(userQuery);
       } catch (e) {
         _msgs.add(_Msg(false, '⚠ $e'));
+        if (mounted) setState(() => _busy = false);
       }
-      if (mounted) setState(() => _busy = false);
       _toBottom();
       return;
     }
@@ -252,7 +246,9 @@ class _S extends State<ChatScreen> {
 
   Widget _bubble(_Msg m) {
     final cs = Theme.of(context).colorScheme;
-    final idioms = (m.meta?['modismos'] as List?) ?? [];
+    final idioms = (m.meta?['modismos_detectados'] as List?) ??
+        (m.meta?['modismos'] as List?) ??
+        [];
     return Align(
       alignment: m.mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -289,15 +285,17 @@ class _S extends State<ChatScreen> {
             Wrap(spacing: 6, children: [
               for (final i in idioms)
                 Tooltip(
-                  message: (i is Map && i['significados'] is List)
-                      ? (i['significados'] as List).join(' / ')
-                      : (i is Map ? (i['modismo'] ?? '') : '$i'),
+                  message: (i is Map && i['significado'] != null)
+                      ? '${i['significado']}${(i['ejemplo_uso'] != null && i['ejemplo_uso'].toString().isNotEmpty) ? '\nEjemplo: ${i['ejemplo_uso']}' : ''}'
+                      : (i is Map && i['significados'] is List)
+                          ? (i['significados'] as List).join(' / ')
+                          : (i is Map ? (i['palabra'] ?? i['modismo'] ?? '') : '$i'),
                   child: Chip(
                     backgroundColor: const Color(0xFFF0FDF4),
                     side: const BorderSide(color: Color(0xFFBBF7D0)),
                     avatar: const Icon(Icons.translate, size: 14, color: Color(0xFF075E54)),
                     label: Text(
-                      i is Map ? (i['modismo'] ?? '') : '$i',
+                      i is Map ? (i['palabra'] ?? i['modismo'] ?? '') : '$i',
                       style: const TextStyle(fontSize: 12, color: Color(0xFF075E54), fontWeight: FontWeight.w600),
                     ),
                     visualDensity: VisualDensity.compact,
@@ -313,8 +311,8 @@ class _S extends State<ChatScreen> {
                   Icon(Icons.check_circle_outline, size: 12, color: cs.primary),
                   const SizedBox(width: 4),
                   Text(
-                    '${m.meta!['intencion']} · ${m.meta!['tiempo_respuesta']} s · '
-                    '${m.meta!['origen_respuesta'] == 'base_local' ? 'Base Local' : (m.meta!['modelo'] ?? 'Llama 3')}',
+                    '${m.meta!['fuente'] ?? (m.meta!['intencion'] != null ? '${m.meta!['intencion']} · ' : '')}'
+                    '${m.meta!['tiempo_respuesta'] != null ? ' · ${m.meta!['tiempo_respuesta']} s' : ''}',
                     style: const TextStyle(fontSize: 11, color: Color(0xFF718096)),
                   ),
                 ],
@@ -334,7 +332,6 @@ class _S extends State<ChatScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo / Avatar central
               Container(
                 width: 64,
                 height: 64,
@@ -362,8 +359,6 @@ class _S extends State<ChatScreen> {
                 style: TextStyle(fontSize: 14, color: Color(0xFF718096)),
               ),
               const SizedBox(height: 32),
-
-              // Tarjetas de sugerencias
               Wrap(
                 spacing: 12,
                 runSpacing: 12,

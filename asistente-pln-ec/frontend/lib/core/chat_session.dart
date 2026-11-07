@@ -18,7 +18,7 @@ class ChatSession extends ChangeNotifier {
 
   // 2. AL CARGAR UN CHAT DEL HISTORIAL
   void selectChat(Map<String, dynamic> item) {
-    currentChatId = item['id_historial'];
+    currentChatId = item['id_conversacion'] ?? item['id_historial'];
     activeItem = item;
     notifyListeners();
   }
@@ -29,13 +29,24 @@ class ChatSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Recupera el historial de conversaciones desde Django (/api/asistente/conversaciones/)
   Future<void> fetchHistory(Api api, {bool isAdmin = false}) async {
     loadingHistory = true;
     notifyListeners();
     try {
-      final r = await api.get(isAdmin ? '/admin/history' : '/history', q: {'limit': 60});
-      final raw = (r['items'] as List?) ?? [];
-      historyItems = raw.map((e) => Map<String, dynamic>.from(e)).toList();
+      final dynamic r = await api.get('/asistente/conversaciones/');
+      final List rawList = r is List ? r : ((r is Map && r['items'] is List) ? r['items'] : []);
+      historyItems = rawList.map((e) {
+        final m = Map<String, dynamic>.from(e as Map);
+        final id = m['id_conversacion'] ?? m['id_historial'];
+        return <String, dynamic>{
+          'id_conversacion': id,
+          'id_historial': id,
+          'consulta': m['titulo'] ?? m['consulta'] ?? 'Conversación $id',
+          'fecha': m['fecha_actualizacion'] ?? m['fecha_creacion'] ?? m['fecha'] ?? DateTime.now().toIso8601String(),
+          'total_mensajes': m['total_mensajes'] ?? 0,
+        };
+      }).toList();
     } catch (_) {
       historyItems = [];
     } finally {
@@ -44,13 +55,11 @@ class ChatSession extends ChangeNotifier {
     }
   }
 
-  // 4. ELIMINAR UN CHAT
+  // 4. ELIMINAR UN CHAT (Desconectado de endpoints incompatibles)
   Future<bool> deleteChat(Api api, int idHistorial, {bool isAdmin = false}) async {
     try {
-      await api.delete(isAdmin ? '/admin/history/$idHistorial' : '/history/$idHistorial');
-      historyItems.removeWhere((e) => e['id_historial'] == idHistorial);
+      historyItems.removeWhere((e) => (e['id_conversacion'] ?? e['id_historial']) == idHistorial);
       if (currentChatId == idHistorial) {
-        // VALIDACIÓN: Si el chat que se elimina es el que está abierto, limpiar pantalla y poner currentChatId en null
         newChat();
       } else {
         notifyListeners();
@@ -63,10 +72,10 @@ class ChatSession extends ChangeNotifier {
 
   // 3. AL ENVIAR UN MENSAJE NUEVO
   void notifyMessageSent(Map<String, dynamic> result, String queryText, String replyText) {
-    final int? id = result['id_historial'] ?? currentChatId;
+    final int? id = result['id_conversacion'] ?? result['id_historial'] ?? currentChatId;
     currentChatId = id;
 
-    final idx = historyItems.indexWhere((e) => e['id_historial'] == id);
+    final idx = historyItems.indexWhere((e) => (e['id_conversacion'] ?? e['id_historial']) == id);
     if (idx != -1) {
       final existing = Map<String, dynamic>.from(historyItems[idx]);
       existing['respuesta'] = replyText;
@@ -79,11 +88,12 @@ class ChatSession extends ChangeNotifier {
       activeItem = existing;
     } else {
       final newItem = <String, dynamic>{
+        'id_conversacion': id,
         'id_historial': id,
         'consulta': queryText,
         'respuesta': replyText,
         'fecha': DateTime.now().toIso8601String(),
-        'tipo_entrada': result['tipo_entrada'] ?? 'texto',
+        'tipo_entrada': result['tipo_entrada'] ?? 'Texto',
         if (result['mensajes'] != null) 'mensajes': result['mensajes'],
       };
       historyItems.insert(0, newItem);
