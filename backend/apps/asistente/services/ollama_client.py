@@ -168,6 +168,8 @@ class OllamaNLPService:
 
         t = texto.strip().lower()
         t_limpio = re.sub(r'^[^\w\s\d]+|[^\w\s\d]+$', '', t).strip()
+        t_limpio = re.sub(r'[,;:]', ' ', t_limpio)
+        t_limpio = re.sub(r'\s+', ' ', t_limpio).strip()
 
         # Si contiene palabras o conectores que implican preguntas sustantivas o dialectales, enviar a Ollama
         palabras_sustantivas = [

@@ -35,9 +35,9 @@ def ejecutar_test(numero, titulo, texto, id_conversacion=None):
     try:
         r = requests.post('http://localhost:8000/api/asistente/generar/', json=payload, headers=headers, timeout=120)
         t_http = round(time.time() - t0, 3)
-        if r.status_code == 201:
+        if r.status_code == 200:
             data = r.json()
-            print(f"Status: {r.status_code} CREATED")
+            print(f"Status: {r.status_code} OK")
             print(f"Tiempo HTTP medido: {t_http} s")
             print(f"Tiempo registrado asistente: {data.get('tiempo_respuesta')} s")
             print(f"Fuente: {data.get('fuente')}")

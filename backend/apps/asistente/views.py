@@ -49,8 +49,8 @@ class GenerarTextoAPIView(APIView):
             r'nuevamente', r'profundiza', r'ahorrar', r'estudiar', r'aprender', r'm[eé]todos?'
         ]
 
-        # Si coincide con intención explicativa o si la pregunta es sustantiva (> 50 caracteres)
-        requiere_explicacion = any(re.search(p, t) for p in patrones_explicativos) or len(t) > 50
+        # Si coincide con intención explicativa o desarrollo conceptual extenso
+        requiere_explicacion = any(re.search(p, t) for p in patrones_explicativos) or len(t) > 120
 
         # Si es un cálculo aritmético directo simple o saludo muy breve
         es_calculo_o_saludo = any(re.search(rf'\b{p}\b', t) for p in [
