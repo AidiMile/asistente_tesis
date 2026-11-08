@@ -87,6 +87,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 6}},
 ]
 
+# Tiempo de expiración del enlace de recuperación de contraseña (en segundos)
+PASSWORD_RESET_TIMEOUT = int(os.getenv('PASSWORD_RESET_TIMEOUT', 3600))  # 1 hora
+
 LANGUAGE_CODE = 'es-ec'
 TIME_ZONE = 'America/Guayaquil'
 USE_I18N = True
@@ -108,7 +111,42 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '200/day',
+        'user': '2000/day',
+        'password_reset': '5/minute',
+    },
 }
+
+# Configuración de Correo Electrónico (Gmail SMTP / Producción / Desarrollo)
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes')
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 'yes')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '').strip()
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '').strip()
+
+# Selección de Backend: si se configuran credenciales SMTP, se usa smtp.EmailBackend; si no, consola para desarrollo seguro.
+_default_backend = 'django.core.mail.backends.smtp.EmailBackend' if (EMAIL_HOST_USER and EMAIL_HOST_PASSWORD) else 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', _default_backend)
+
+# El remitente debe corresponder a la cuenta Gmail autenticada para evitar rechazos de entrega en servidores SMTP
+_raw_from = os.getenv('DEFAULT_FROM_EMAIL', '').strip()
+if not _raw_from or any(p in _raw_from.lower() for p in ('ejemplo', 'coloca', 'tu_correo', 'soporte@upec.edu.ec')):
+    if EMAIL_HOST_USER:
+        DEFAULT_FROM_EMAIL = f'Asistente Virtual PLN-EC <{EMAIL_HOST_USER}>'
+    else:
+        DEFAULT_FROM_EMAIL = 'Asistente Virtual PLN-EC <soporte@upec.edu.ec>'
+else:
+    DEFAULT_FROM_EMAIL = _raw_from
+
+# URL pública de Frontend para enlaces de recuperación
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:8080')
 
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id_usuario',

@@ -57,6 +57,18 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/register/`, userData);
   }
 
+  requestPasswordReset(correo: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/password-reset/`, { correo });
+  }
+
+  validatePasswordResetToken(uid: string, token: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/password-reset-validate/`, { uid, token });
+  }
+
+  confirmPasswordReset(payload: { uid: string; token: string; new_password: string; new_password_confirm: string }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/password-reset-confirm/`, payload);
+  }
+
   logout(): void {
     this.clearSession();
     this.router.navigate(['/login']);

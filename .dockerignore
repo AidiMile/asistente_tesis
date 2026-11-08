@@ -1,13 +1,55 @@
+# Caché de pruebas y Python (absoluto y recursivo)
+.pytest_cache
+.pytest_cache/**
+pytest_cache
+pytest_cache/**
+backend/.pytest_cache
+backend/.pytest_cache/**
+backend/pytest_cache
+backend/pytest_cache/**
+asistente-pln-ec/backend/.pytest_cache
+asistente-pln-ec/backend/.pytest_cache/**
+**/.pytest_cache
+**/.pytest_cache/**
+**/pytest_cache
+**/pytest_cache/**
+*/.pytest_cache
+*/.pytest_cache/**
+*/pytest_cache
+*/pytest_cache/**
+
+# Caché bytecode de Python
 __pycache__
+__pycache__/**
+**/__pycache__
+**/__pycache__/**
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
+
+# Entornos virtuales
+env
+env/**
+venv
+venv/**
+.venv
+.venv/**
+
+# Variables de entorno y Git
 .env
 .git
+.git/**
 .gitignore
+
+# Bases de datos y configuraciones locales
 asistente.db
-.vscode/
-.idea/
+.vscode
+.vscode/**
+.idea
+.idea/**
+
+# Cobertura y reportes
+.coverage
+htmlcov
+htmlcov/**
+*.log

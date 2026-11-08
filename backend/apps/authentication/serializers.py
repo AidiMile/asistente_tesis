@@ -1,5 +1,10 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
 from .models import Usuario, Perfil
 
 class PerfilSerializer(serializers.ModelSerializer):
@@ -46,3 +51,65 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'rol': getattr(getattr(self.user, 'perfil', None), 'rol', 'Estudiante'),
         }
         return data
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    correo = serializers.EmailField(required=True)
+
+
+class PasswordResetTokenValidateSerializer(serializers.Serializer):
+    uid = serializers.CharField(required=True)
+    token = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        try:
+            user_id = force_str(urlsafe_base64_decode(attrs['uid']))
+            user = Usuario.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, Usuario.DoesNotExist):
+            raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
+
+        if not user.is_active:
+            raise serializers.ValidationError({"detail": "La cuenta de usuario está inactiva."})
+
+        if not default_token_generator.check_token(user, attrs['token']):
+            raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
+
+        attrs['user'] = user
+        return attrs
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField(required=True)
+    token = serializers.CharField(required=True)
+    new_password = serializers.CharField(write_only=True, required=True, min_length=6)
+    new_password_confirm = serializers.CharField(write_only=True, required=True, min_length=6)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['new_password_confirm']:
+            raise serializers.ValidationError({"new_password_confirm": "Las contraseñas no coinciden."})
+
+        try:
+            user_id = force_str(urlsafe_base64_decode(attrs['uid']))
+            user = Usuario.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, Usuario.DoesNotExist):
+            raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
+
+        if not user.is_active:
+            raise serializers.ValidationError({"detail": "La cuenta de usuario está inactiva."})
+
+        if not default_token_generator.check_token(user, attrs['token']):
+            raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
+
+        try:
+            validate_password(attrs['new_password'], user=user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"new_password": list(e.messages)})
+
+        attrs['user'] = user
+        return attrs
+
+    def save(self):
+        user = self.validated_data['user']
+        user.set_password(self.validated_data['new_password'])
+        user.save()
+        return user
