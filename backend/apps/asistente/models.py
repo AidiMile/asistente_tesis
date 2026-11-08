@@ -54,12 +54,13 @@ class Conversacion(models.Model):
         related_name='conversaciones', db_column='id_usuario'
     )
     titulo = models.CharField(max_length=120, default='Nueva conversación')
+    fijada = models.BooleanField(default=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'conversaciones'
-        ordering = ['-fecha_actualizacion']
+        ordering = ['-fijada', '-fecha_actualizacion']
 
     def __str__(self):
         return f"{self.titulo} ({self.usuario.nombre})"

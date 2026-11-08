@@ -64,6 +64,15 @@ export class AssistantService {
     return this.http.get<any>(`${this.apiUrl}/conversaciones/${id}/`, { headers: this.getHeaders() });
   }
 
+  toggleFijarConversacion(id: number, fijada?: boolean): Observable<any> {
+    const body = fijada !== undefined ? { fijada } : {};
+    return this.http.post<any>(`${this.apiUrl}/conversaciones/${id}/fijar/`, body, { headers: this.getHeaders() });
+  }
+
+  eliminarConversacion(id: number): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/conversaciones/${id}/`, { headers: this.getHeaders() });
+  }
+
   getMetricasResumen(): Observable<any> {
     return this.http.get<any>('/api/evaluacion/resumen/', { headers: this.getHeaders() });
   }

@@ -7,6 +7,8 @@
 
 # Respaldos y temporales
 backups_fase1/
+respaldo_*/
+scratch/
 .tunnel_host
 *.tunnel_host
 *.bak

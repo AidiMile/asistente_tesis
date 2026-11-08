@@ -49,7 +49,17 @@ class GenerarTextoAPIView(APIView):
             r'nuevamente', r'profundiza', r'ahorrar', r'estudiar', r'aprender', r'm[eé]todos?'
         ]
 
-        # Si coincide con intención explicativa o desarrollo conceptual extenso
+        # Patrones que requieren listas estructuradas o resúmenes de varios puntos
+        patrones_listas_o_resumen = [
+            r'resumen', r'resume', r'regiones', r'pasos', r'consejos', r'estrategias',
+            r'caracter[ií]sticas', r'ventajas', r'desventajas', r'diferencias?',
+            r'tipos\s+de', r'ejemplos?', r'elementos', r'factores',
+            r'platos?', r'comidas?', r'gastronom[ií]a', r'alimentos?', r'recetas?',
+            r'lugares?', r'sitios?', r'atractivos?', r'tur[ií]sticos?',
+            r'costumbres?', r'tradiciones?', r'ciudades?', r'provincias?'
+        ]
+
+        es_lista_o_resumen = any(re.search(p, t) for p in patrones_listas_o_resumen)
         requiere_explicacion = any(re.search(p, t) for p in patrones_explicativos) or len(t) > 120
 
         # Si es un cálculo aritmético directo simple o saludo muy breve
@@ -60,6 +70,10 @@ class GenerarTextoAPIView(APIView):
 
         if es_calculo_o_saludo and not requiere_explicacion:
             return 80
+
+        if es_lista_o_resumen:
+            # Presupuesto calibrado para resúmenes o listas estructuradas (150 tokens): ~38-48s en CPU
+            return 150
 
         if requiere_explicacion:
             # Presupuesto calibrado para consultas explicativas (130 tokens): ~35-45s en CPU sin riesgo de timeout
@@ -241,7 +255,7 @@ class ConversacionListCreateAPIView(generics.ListCreateAPIView):
         serializer.save(usuario=self.request.user)
 
 
-class ConversacionDetalleAPIView(generics.RetrieveAPIView):
+class ConversacionDetalleAPIView(generics.RetrieveDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ConversacionDetalleSerializer
     lookup_field = 'id_conversacion'
@@ -252,6 +266,32 @@ class ConversacionDetalleAPIView(generics.RetrieveAPIView):
                      .prefetch_related(Prefetch('respuestas', queryset=respuestas)))
         return (Conversacion.objects.filter(usuario=self.request.user)
                 .prefetch_related(Prefetch('consultas', queryset=consultas)))
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            instance.delete()
+
+
+class ConversacionFijarAPIView(APIView):
+    """
+    Permite fijar o desfijar una conversación propia.
+    Endpoint: POST /api/asistente/conversaciones/<int:id_conversacion>/fijar/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, id_conversacion):
+        conversacion = get_object_or_404(Conversacion, id_conversacion=id_conversacion, usuario=request.user)
+        if 'fijada' in request.data:
+            conversacion.fijada = bool(request.data['fijada'])
+        else:
+            conversacion.fijada = not conversacion.fijada
+        conversacion.save(update_fields=['fijada'])
+        return Response({
+            'status': 'ok',
+            'id_conversacion': conversacion.id_conversacion,
+            'fijada': conversacion.fijada,
+            'mensaje': 'Conversación fijada con éxito' if conversacion.fijada else 'Conversación desfijada con éxito'
+        }, status=status.HTTP_200_OK)
 
 
 class HistorialUsuarioAPIView(generics.ListAPIView):

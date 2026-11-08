@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -14,6 +14,7 @@ export interface ConversacionItem {
   titulo: string;
   fecha_creacion: string;
   fecha_actualizacion: string;
+  fijada?: boolean;
   total_mensajes?: number;
 }
 
@@ -43,17 +44,20 @@ export interface ConversationGroup {
       class="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden transition-opacity">
     </div>
 
-    <!-- Mobile Slide-out Drawer Navigation -->
+    <!-- ============================================================== -->
+    <!-- PANEL MÓVIL (Slide-out Drawer Navigation)                        -->
+    <!-- ============================================================== -->
     <aside
       [class.translate-x-0]="isMobileOpen"
       [class.-translate-x-full]="!isMobileOpen"
-      class="fixed inset-y-0 left-0 z-50 w-72 sm:w-80 bg-[var(--bg-sidebar)] border-r border-[var(--border-color)] flex flex-col justify-between shadow-2xl md:hidden transition-transform duration-300 ease-in-out select-none">
+      class="fixed inset-y-0 left-0 z-50 w-72 sm:w-80 bg-[var(--bg-sidebar)] border-r border-[var(--border-color)] flex flex-col justify-between shadow-2xl md:hidden transition-transform duration-300 ease-in-out select-none overflow-x-hidden">
       
-      <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- Drawer Header with Institutional Identity & Close Button -->
-        <div class="px-4 py-4 border-b border-[var(--border-color)] flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-sky-500 dark:from-sky-500 dark:to-blue-600 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 dark:shadow-sky-500/20 shrink-0">
+      <!-- 1. ZONA SUPERIOR: Identidad, Nueva conversación, Buscador -->
+      <div class="p-3.5 pb-2.5 border-b border-[var(--border-color)] space-y-3 bg-[var(--bg-sidebar)] shrink-0">
+        <!-- Identidad PLN-EC / UPEC & Botón Cerrar -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 shrink-0">
               <i class="bi bi-cpu-fill text-lg"></i>
             </div>
             <div class="min-w-0">
@@ -61,196 +65,305 @@ export interface ConversationGroup {
                 <h1 class="text-base font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">PLN-EC</h1>
                 <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300 border border-amber-300/40 dark:border-amber-400/20">UPEC</span>
               </div>
-              <p class="text-[11px] text-emerald-700 dark:text-sky-400 font-medium tracking-wide truncate">Español Ecuatoriano</p>
+              <p class="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium tracking-wide truncate">Español Ecuatoriano</p>
             </div>
           </div>
           <button
             (click)="closeMobile()"
-            aria-label="Cerrar menú"
-            class="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-colors">
-            <i class="bi bi-x-lg text-lg"></i>
+            aria-label="Cerrar panel"
+            class="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-colors">
+            <i class="bi bi-x-lg text-base"></i>
           </button>
         </div>
 
-        <!-- Action: New Conversation -->
-        <div class="p-3 pb-2">
+        <!-- Botón Nueva conversación -->
+        <button
+          (click)="newConversation()"
+          class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-all group">
+          <div class="flex items-center gap-2">
+            <i class="bi bi-plus-lg text-sm"></i>
+            <span>Nueva conversación</span>
+          </div>
+          <i class="bi bi-chat-left-text text-xs opacity-80 group-hover:opacity-100"></i>
+        </button>
+
+        <!-- Buscador de conversaciones -->
+        <div class="relative">
+          <i class="bi bi-search absolute left-3 top-2.5 text-xs text-slate-400"></i>
+          <input
+            type="text"
+            [(ngModel)]="searchQuery"
+            placeholder="Buscar conversaciones..."
+            class="w-full bg-slate-100 dark:bg-slate-900/60 border border-[var(--border-color)] text-slate-800 dark:text-slate-200 pl-8 pr-7 py-2 rounded-xl text-xs focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-1 focus:ring-emerald-500/20 transition-all placeholder:text-slate-400"
+          />
           <button
-            (click)="newConversation()"
-            class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-sky-500 dark:hover:bg-sky-400 text-white dark:text-slate-950 text-xs font-semibold shadow-sm transition-all group">
-            <div class="flex items-center gap-2">
-              <i class="bi bi-plus-lg text-sm"></i>
-              <span>Nueva conversación</span>
-            </div>
-            <i class="bi bi-chat-left-text text-xs opacity-80 group-hover:opacity-100"></i>
+            *ngIf="searchQuery"
+            (click)="clearSearch()"
+            aria-label="Limpiar búsqueda"
+            class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs">
+            <i class="bi bi-x-circle-fill"></i>
           </button>
-
-          <!-- Search Input -->
-          <div class="relative mt-2">
-            <i class="bi bi-search absolute left-3 top-2.5 text-xs text-slate-400"></i>
-            <input
-              type="text"
-              [(ngModel)]="searchQuery"
-              placeholder="Buscar conversaciones..."
-              class="w-full bg-slate-100 dark:bg-slate-900/60 border border-[var(--border-color)] text-slate-800 dark:text-slate-200 pl-8 pr-7 py-2 rounded-xl text-xs focus:outline-none focus:border-emerald-500 dark:focus:border-sky-400 transition-all placeholder:text-slate-400"
-            />
-            <button
-              *ngIf="searchQuery"
-              (click)="clearSearch()"
-              aria-label="Limpiar búsqueda"
-              class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs">
-              <i class="bi bi-x-circle-fill"></i>
-            </button>
-          </div>
         </div>
-
-        <!-- Grouped Conversation History (Scrollable) -->
-        <div class="flex-1 overflow-y-auto px-3 py-1 space-y-3">
-          <!-- Loading state -->
-          <div *ngIf="isLoading" class="p-4 text-center text-xs text-slate-400">
-            <i class="bi bi-arrow-repeat animate-spin mr-1"></i> Cargando historial...
-          </div>
-
-          <!-- Empty search results -->
-          <div *ngIf="!isLoading && searchQuery && filteredConversations.length === 0" class="px-3 py-6 text-center text-xs text-slate-400">
-            <i class="bi bi-search text-base block mb-1 opacity-50"></i>
-            No se encontraron conversaciones
-          </div>
-
-          <!-- Empty conversations list -->
-          <div *ngIf="!isLoading && !searchQuery && conversations.length === 0" class="px-3 py-6 text-center text-xs text-slate-400">
-            <i class="bi bi-chat-dots text-base block mb-1 opacity-50"></i>
-            Sin conversaciones previas
-          </div>
-
-          <!-- Chronologically Grouped List -->
-          <div *ngFor="let group of groupedConversations" class="space-y-0.5">
-            <div class="px-2 pt-2 pb-1 text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
-              {{ group.name }}
-            </div>
-            <button
-              *ngFor="let conv of group.conversations"
-              (click)="selectConversation(conv.id_conversacion)"
-              [class.active-conv]="activeConversationId === conv.id_conversacion"
-              [title]="conv.titulo"
-              class="conversation-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all text-left">
-              <i [class]="activeConversationId === conv.id_conversacion ? 'bi bi-chat-square-fill text-emerald-600 dark:text-sky-400' : 'bi bi-chat-square-text text-slate-400'" class="text-xs shrink-0"></i>
-              <span class="truncate flex-1">{{ conv.titulo || 'Nueva conversación' }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Mobile Drawer Navigation Links -->
-        <nav class="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] space-y-1">
-          <a routerLink="/chat" (click)="closeMobile()" routerLinkActive="active-nav" class="nav-item">
-            <i class="bi bi-chat-square-text text-base"></i>
-            <span>Chat principal</span>
-          </a>
-
-          <a routerLink="/history" (click)="closeMobile()" routerLinkActive="active-nav" class="nav-item">
-            <i class="bi bi-clock-history text-base"></i>
-            <span>Historial completo</span>
-          </a>
-
-          <a routerLink="/profile" (click)="closeMobile()" routerLinkActive="active-nav" class="nav-item">
-            <i class="bi bi-person text-base"></i>
-            <span>Perfil de usuario</span>
-          </a>
-
-          <!-- Admin Links in Mobile Drawer -->
-          <ng-container *ngIf="isAdmin">
-            <div class="pt-2 pb-1 px-3">
-              <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Investigación & PLN</span>
-            </div>
-            <a routerLink="/dashboard" (click)="closeMobile()" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-grid text-base"></i>
-              <span>Dashboard</span>
-            </a>
-            <a routerLink="/modismos" (click)="closeMobile()" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-translate text-base"></i>
-              <span>Modismos</span>
-            </a>
-            <a routerLink="/metrics" (click)="closeMobile()" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-graph-up-arrow text-base"></i>
-              <span>Métricas</span>
-            </a>
-            <a routerLink="/history-global" (click)="closeMobile()" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-collection text-base"></i>
-              <span>Historial global</span>
-            </a>
-          </ng-container>
-        </nav>
       </div>
 
-      <!-- Mobile Drawer Footer -->
-      <div class="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] space-y-2">
+      <!-- 2. ZONA CENTRAL: Conversaciones fijadas, Recientes, Menú de 3 puntos, Historial completo -->
+      <div class="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+        <!-- Estado de carga -->
+        <div *ngIf="isLoading" class="p-4 text-center text-xs text-slate-400">
+          <i class="bi bi-arrow-repeat animate-spin mr-1"></i> Cargando historial...
+        </div>
+
+        <!-- Sin resultados de búsqueda -->
+        <div *ngIf="!isLoading && searchQuery && filteredConversations.length === 0" class="px-3 py-6 text-center text-xs text-slate-400">
+          <i class="bi bi-search text-base block mb-1 opacity-50"></i>
+          No se encontraron conversaciones
+        </div>
+
+        <!-- Sin conversaciones -->
+        <div *ngIf="!isLoading && !searchQuery && conversations.length === 0" class="px-3 py-6 text-center text-xs text-slate-400">
+          <i class="bi bi-chat-dots text-base block mb-1 opacity-50"></i>
+          Sin conversaciones previas
+        </div>
+
+        <!-- SECCIÓN 1: Conversaciones fijadas -->
+        <div *ngIf="fijadasConversations.length > 0" class="space-y-1">
+          <div class="px-2 pt-1 pb-1 text-[10px] font-bold tracking-wider text-amber-700 dark:text-amber-400 uppercase flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <i class="bi bi-pin-angle-fill text-amber-500 text-xs"></i>
+              <span>Conversaciones fijadas</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-400/20 text-amber-800 dark:text-amber-300 font-bold">
+              {{ fijadasConversations.length }}
+            </span>
+          </div>
+
+          <div
+            *ngFor="let conv of fijadasConversations"
+            [class.active-conv]="activeConversationId === conv.id_conversacion"
+            class="conversation-item group w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl text-xs transition-all text-left">
+            <div (click)="selectConversation(conv.id_conversacion)" class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+              <i class="bi bi-pin-angle-fill text-amber-500 text-xs shrink-0" title="Conversación fijada"></i>
+              <span class="truncate flex-1 font-medium text-slate-800 dark:text-slate-200" [title]="conv.titulo">
+                {{ conv.titulo || 'Nueva conversación' }}
+              </span>
+            </div>
+            <!-- Menú 3 puntos -->
+            <div class="relative shrink-0 flex items-center" (click)="$event.stopPropagation()">
+              <button
+                type="button"
+                (click)="toggleMenu($event, conv.id_conversacion)"
+                aria-label="Opciones"
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors">
+                <i class="bi bi-three-dots-vertical text-xs"></i>
+              </button>
+              <div
+                *ngIf="menuOpenId === conv.id_conversacion"
+                class="absolute right-0 top-7 w-36 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] shadow-xl z-50 py-1 text-xs">
+                <button
+                  type="button"
+                  (click)="toggleFijar(conv, $event)"
+                  class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--bg-card-hover)] text-slate-700 dark:text-slate-200">
+                  <i class="bi bi-pin-angle text-slate-400"></i>
+                  <span>Desfijar</span>
+                </button>
+                <button
+                  type="button"
+                  (click)="confirmarEliminar(conv, $event)"
+                  class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                  <i class="bi bi-trash3"></i>
+                  <span>Eliminar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 2: Conversaciones recientes -->
+        <div *ngIf="recientesConversations.length > 0" class="space-y-2">
+          <div class="px-2 pt-2 pb-1 text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase flex items-center gap-1.5">
+            <i class="bi bi-chat-left-text text-emerald-600 dark:text-emerald-400 text-xs"></i>
+            <span>Conversaciones recientes</span>
+          </div>
+
+          <div *ngFor="let group of groupedRecientes" class="space-y-0.5">
+            <div class="px-2 py-0.5 text-[9px] font-bold tracking-wider text-slate-400/80 dark:text-slate-500/80 uppercase">
+              {{ group.name }}
+            </div>
+            <div
+              *ngFor="let conv of group.conversations"
+              [class.active-conv]="activeConversationId === conv.id_conversacion"
+              class="conversation-item group w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl text-xs transition-all text-left">
+              <div (click)="selectConversation(conv.id_conversacion)" class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                <i [class]="activeConversationId === conv.id_conversacion ? 'bi bi-chat-square-fill text-emerald-600 dark:text-emerald-400' : 'bi bi-chat-square-text text-slate-400'" class="text-xs shrink-0"></i>
+                <span class="truncate flex-1" [title]="conv.titulo">{{ conv.titulo || 'Nueva conversación' }}</span>
+              </div>
+              <!-- Menú 3 puntos -->
+              <div class="relative shrink-0 flex items-center" (click)="$event.stopPropagation()">
+                <button
+                  type="button"
+                  (click)="toggleMenu($event, conv.id_conversacion)"
+                  aria-label="Opciones"
+                  class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors">
+                  <i class="bi bi-three-dots-vertical text-xs"></i>
+                </button>
+                <div
+                  *ngIf="menuOpenId === conv.id_conversacion"
+                  class="absolute right-0 top-7 w-36 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] shadow-xl z-50 py-1 text-xs">
+                  <button
+                    type="button"
+                    (click)="toggleFijar(conv, $event)"
+                    class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--bg-card-hover)] text-slate-700 dark:text-slate-200">
+                    <i class="bi bi-pin-angle-fill text-amber-500"></i>
+                    <span>Fijar</span>
+                  </button>
+                  <button
+                    type="button"
+                    (click)="confirmarEliminar(conv, $event)"
+                    class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                    <i class="bi bi-trash3"></i>
+                    <span>Eliminar</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Acceso directo al Historial Completo en Zona Central -->
+        <div class="pt-3 pb-1 border-t border-[var(--border-color)]">
+          <a
+            routerLink="/history"
+            (click)="closeMobile()"
+            routerLinkActive="active-nav"
+            class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-[var(--bg-card-hover)] border border-[var(--border-color)] transition-all group">
+            <div class="flex items-center gap-2.5">
+              <div class="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs group-hover:scale-105 transition-transform">
+                <i class="bi bi-clock-history"></i>
+              </div>
+              <span>Historial completo</span>
+            </div>
+            <i class="bi bi-chevron-right text-xs text-slate-400 group-hover:translate-x-0.5 transition-transform"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- 3. ZONA INFERIOR: Perfil, Modo claro/oscuro, Información usuario y Cierre de sesión -->
+      <div class="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] space-y-2 shrink-0">
+        <!-- Acceso al perfil -->
+        <a
+          routerLink="/profile"
+          (click)="closeMobile()"
+          routerLinkActive="active-nav"
+          class="nav-item flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2.5">
+            <i class="bi bi-person-circle text-base text-slate-500 dark:text-slate-400"></i>
+            <span>Mi perfil</span>
+          </div>
+          <span class="text-[10px] text-slate-400 dark:text-slate-500">Configuración</span>
+        </a>
+
+        <!-- Admin links si es administrador -->
+        <ng-container *ngIf="isAdmin">
+          <div class="pt-1.5 pb-1 border-t border-[var(--border-color)] space-y-1">
+            <div class="px-2 flex items-center justify-between">
+              <span class="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Investigación & PLN</span>
+              <span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">Admin</span>
+            </div>
+            <div class="grid grid-cols-2 gap-1">
+              <a routerLink="/dashboard" (click)="closeMobile()" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                <i class="bi bi-grid text-xs text-emerald-600 dark:text-emerald-400"></i>
+                <span class="truncate">Dashboard</span>
+              </a>
+              <a routerLink="/modismos" (click)="closeMobile()" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                <i class="bi bi-translate text-xs text-amber-500"></i>
+                <span class="truncate">Modismos</span>
+              </a>
+              <a routerLink="/metrics" (click)="closeMobile()" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                <i class="bi bi-graph-up text-xs text-emerald-600 dark:text-emerald-400"></i>
+                <span class="truncate">Métricas</span>
+              </a>
+              <a routerLink="/history-global" (click)="closeMobile()" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                <i class="bi bi-collection text-xs text-teal-600 dark:text-teal-400"></i>
+                <span class="truncate">Global</span>
+              </a>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- Selector Modo Claro / Oscuro -->
         <button
           (click)="toggleTheme()"
           [attr.aria-label]="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
           class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-[var(--border-color)] transition-all">
-          <div class="flex items-center gap-2.5">
+          <div class="flex items-center gap-2">
             <i [class]="isDark ? 'bi bi-moon-stars-fill text-amber-400' : 'bi bi-sun-fill text-amber-500'" class="text-sm"></i>
             <span>{{ isDark ? 'Modo Oscuro' : 'Modo Claro' }}</span>
           </div>
-          <span class="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+          <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
             {{ isDark ? 'Oscuro' : 'Claro' }}
           </span>
         </button>
 
-        <div class="pt-1 flex items-center justify-between">
-          <div class="flex items-center gap-2.5 overflow-hidden">
-            <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300/60 dark:bg-sky-900/60 dark:text-sky-300 dark:border-sky-500/40 font-bold flex items-center justify-center text-xs shrink-0">
+        <!-- Información de usuario y cierre de sesión -->
+        <div class="pt-1.5 border-t border-[var(--border-color)] flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs border border-emerald-400/40">
               {{ userInitial }}
             </div>
-            <div class="truncate">
-              <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{{ userName }}</p>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">{{ userRole }}</p>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">{{ userName }}</p>
+              <p class="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium truncate">{{ userRole }}</p>
             </div>
           </div>
           <button
             (click)="logout()"
             title="Cerrar sesión"
-            class="p-2 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0">
+            aria-label="Cerrar sesión"
+            class="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors shrink-0">
             <i class="bi bi-box-arrow-right text-base"></i>
           </button>
         </div>
       </div>
     </aside>
 
-    <!-- Desktop Sidebar (Collapsible: w-64 expanded, w-16 collapsed) -->
+    <!-- ============================================================== -->
+    <!-- PANEL ESCRITORIO (Collapsible: w-64 expanded, w-16 collapsed)   -->
+    <!-- ============================================================== -->
     <aside
       [ngClass]="isCollapsed ? 'w-16' : 'w-64'"
-      class="hidden md:flex bg-[var(--bg-sidebar)] border-r border-[var(--border-color)] flex-col justify-between h-screen fixed left-0 top-0 z-30 select-none shadow-sm transition-[width] duration-300 ease-in-out">
+      class="hidden md:flex bg-[var(--bg-sidebar)] border-r border-[var(--border-color)] flex-col justify-between h-screen fixed left-0 top-0 z-30 select-none shadow-sm transition-[width] duration-300 ease-in-out overflow-x-hidden">
       
       <!-- EXPANDED DESKTOP VIEW (w-64) -->
-      <div *ngIf="!isCollapsed" class="flex-1 flex flex-col overflow-hidden">
+      <div *ngIf="!isCollapsed" class="flex-1 flex flex-col justify-between h-full overflow-hidden">
         
-        <!-- Header -->
-        <div class="px-4 py-4 border-b border-[var(--border-color)] flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-sky-500 dark:from-sky-500 dark:to-blue-600 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 dark:shadow-sky-500/20 shrink-0">
-              <i class="bi bi-cpu-fill text-lg"></i>
-            </div>
-            <div class="min-w-0">
-              <div class="flex items-center gap-1.5">
-                <h1 class="text-base font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">PLN-EC</h1>
-                <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300 border border-amber-300/40 dark:border-amber-400/20">UPEC</span>
+        <!-- 1. ZONA SUPERIOR: Identidad, Botón Nueva conversación, Buscador -->
+        <div class="p-3.5 pb-2.5 border-b border-[var(--border-color)] space-y-3 bg-[var(--bg-sidebar)] shrink-0">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 shrink-0">
+                <i class="bi bi-cpu-fill text-lg"></i>
               </div>
-              <p class="text-[11px] text-emerald-700 dark:text-sky-400 font-medium tracking-wide truncate">Español Ecuatoriano</p>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <h1 class="text-base font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">PLN-EC</h1>
+                  <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300 border border-amber-300/40 dark:border-amber-400/20">UPEC</span>
+                </div>
+                <p class="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium tracking-wide truncate">Español Ecuatoriano</p>
+              </div>
             </div>
+            <button
+              (click)="toggleCollapse()"
+              title="Contraer barra lateral"
+              class="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-lg transition-colors">
+              <i class="bi bi-layout-sidebar-inset text-base"></i>
+            </button>
           </div>
-          <button
-            (click)="toggleCollapse()"
-            title="Contraer barra lateral"
-            class="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-lg transition-colors">
-            <i class="bi bi-layout-sidebar-inset text-base"></i>
-          </button>
-        </div>
 
-        <!-- Action: New Conversation -->
-        <div class="p-3 pb-2">
+          <!-- Botón Nueva conversación -->
           <button
             (click)="newConversation()"
-            class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-sky-500 dark:hover:bg-sky-400 text-white dark:text-slate-950 text-xs font-semibold shadow-sm transition-all group">
+            class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-all group">
             <div class="flex items-center gap-2">
               <i class="bi bi-plus-lg text-sm"></i>
               <span>Nueva conversación</span>
@@ -258,15 +371,15 @@ export interface ConversationGroup {
             <i class="bi bi-chat-left-text text-xs opacity-80 group-hover:opacity-100"></i>
           </button>
 
-          <!-- Search Input -->
-          <div class="relative mt-2">
+          <!-- Buscador -->
+          <div class="relative">
             <i class="bi bi-search absolute left-3 top-2.5 text-xs text-slate-400"></i>
             <input
               #searchInput
               type="text"
               [(ngModel)]="searchQuery"
               placeholder="Buscar conversaciones..."
-              class="w-full bg-slate-100 dark:bg-slate-900/60 border border-[var(--border-color)] text-slate-800 dark:text-slate-200 pl-8 pr-7 py-2 rounded-xl text-xs focus:outline-none focus:border-emerald-500 dark:focus:border-sky-400 transition-all placeholder:text-slate-400"
+              class="w-full bg-slate-100 dark:bg-slate-900/60 border border-[var(--border-color)] text-slate-800 dark:text-slate-200 pl-8 pr-7 py-2 rounded-xl text-xs focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400 focus:ring-1 focus:ring-emerald-500/20 transition-all placeholder:text-slate-400"
             />
             <button
               *ngIf="searchQuery"
@@ -278,8 +391,8 @@ export interface ConversationGroup {
           </div>
         </div>
 
-        <!-- Grouped Conversations Scroll Area -->
-        <div class="flex-1 overflow-y-auto px-3 py-1 space-y-3">
+        <!-- 2. ZONA CENTRAL: Conversaciones fijadas, Recientes, Menú 3 puntos, Historial completo -->
+        <div class="flex-1 overflow-y-auto px-3 py-2 space-y-3">
           <!-- Loading state -->
           <div *ngIf="isLoading" class="p-4 text-center text-xs text-slate-400">
             <i class="bi bi-arrow-repeat animate-spin mr-1"></i> Cargando historial...
@@ -297,73 +410,211 @@ export interface ConversationGroup {
             Sin conversaciones previas
           </div>
 
-          <!-- Chronologically Grouped List -->
-          <div *ngFor="let group of groupedConversations" class="space-y-0.5">
-            <div class="px-2 pt-2 pb-1 text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
-              {{ group.name }}
+          <!-- SECCIÓN 1: Conversaciones fijadas -->
+          <div *ngIf="fijadasConversations.length > 0" class="space-y-1">
+            <div class="px-2 pt-1 pb-1 text-[10px] font-bold tracking-wider text-amber-700 dark:text-amber-400 uppercase flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <i class="bi bi-pin-angle-fill text-amber-500 text-xs"></i>
+                <span>Conversaciones fijadas</span>
+              </div>
+              <span class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-400/20 text-amber-800 dark:text-amber-300 font-bold">
+                {{ fijadasConversations.length }}
+              </span>
+            </div>
+
+            <div
+              *ngFor="let conv of fijadasConversations"
+              [class.active-conv]="activeConversationId === conv.id_conversacion"
+              class="conversation-item group w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl text-xs transition-all text-left">
+              <div (click)="selectConversation(conv.id_conversacion)" class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                <i class="bi bi-pin-angle-fill text-amber-500 text-xs shrink-0" title="Conversación fijada"></i>
+                <span class="truncate flex-1 font-medium text-slate-800 dark:text-slate-200" [title]="conv.titulo">
+                  {{ conv.titulo || 'Nueva conversación' }}
+                </span>
+              </div>
+              <!-- Menú 3 puntos -->
+              <div class="relative shrink-0 flex items-center" (click)="$event.stopPropagation()">
+                <button
+                  type="button"
+                  (click)="toggleMenu($event, conv.id_conversacion)"
+                  aria-label="Opciones"
+                  class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors">
+                  <i class="bi bi-three-dots-vertical text-xs"></i>
+                </button>
+                <div
+                  *ngIf="menuOpenId === conv.id_conversacion"
+                  class="absolute right-0 top-7 w-36 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] shadow-xl z-50 py-1 text-xs">
+                  <button
+                    type="button"
+                    (click)="toggleFijar(conv, $event)"
+                    class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--bg-card-hover)] text-slate-700 dark:text-slate-200">
+                    <i class="bi bi-pin-angle text-slate-400"></i>
+                    <span>Desfijar</span>
+                  </button>
+                  <button
+                    type="button"
+                    (click)="confirmarEliminar(conv, $event)"
+                    class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                    <i class="bi bi-trash3"></i>
+                    <span>Eliminar</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 2: Conversaciones recientes -->
+          <div *ngIf="recientesConversations.length > 0" class="space-y-2">
+            <div class="px-2 pt-2 pb-1 text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase flex items-center gap-1.5">
+              <i class="bi bi-chat-left-text text-emerald-600 dark:text-emerald-400 text-xs"></i>
+              <span>Conversaciones recientes</span>
+            </div>
+
+            <div *ngFor="let group of groupedRecientes" class="space-y-0.5">
+              <div class="px-2 py-0.5 text-[9px] font-bold tracking-wider text-slate-400/80 dark:text-slate-500/80 uppercase">
+                {{ group.name }}
+              </div>
+              <div
+                *ngFor="let conv of group.conversations"
+                [class.active-conv]="activeConversationId === conv.id_conversacion"
+                class="conversation-item group w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl text-xs transition-all text-left">
+                <div (click)="selectConversation(conv.id_conversacion)" class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                  <i [class]="activeConversationId === conv.id_conversacion ? 'bi bi-chat-square-fill text-emerald-600 dark:text-emerald-400' : 'bi bi-chat-square-text text-slate-400'" class="text-xs shrink-0"></i>
+                  <span class="truncate flex-1" [title]="conv.titulo">{{ conv.titulo || 'Nueva conversación' }}</span>
+                </div>
+                <!-- Menú 3 puntos -->
+                <div class="relative shrink-0 flex items-center" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    (click)="toggleMenu($event, conv.id_conversacion)"
+                    aria-label="Opciones"
+                    class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors">
+                    <i class="bi bi-three-dots-vertical text-xs"></i>
+                  </button>
+                  <div
+                    *ngIf="menuOpenId === conv.id_conversacion"
+                    class="absolute right-0 top-7 w-36 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] shadow-xl z-50 py-1 text-xs">
+                    <button
+                      type="button"
+                      (click)="toggleFijar(conv, $event)"
+                      class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--bg-card-hover)] text-slate-700 dark:text-slate-200">
+                      <i class="bi bi-pin-angle-fill text-amber-500"></i>
+                      <span>Fijar</span>
+                    </button>
+                    <button
+                      type="button"
+                      (click)="confirmarEliminar(conv, $event)"
+                      class="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400">
+                      <i class="bi bi-trash3"></i>
+                      <span>Eliminar</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Acceso directo al Historial Completo en Zona Central -->
+          <div class="pt-3 pb-1 border-t border-[var(--border-color)]">
+            <a
+              routerLink="/history"
+              routerLinkActive="active-nav"
+              class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-[var(--bg-card-hover)] border border-[var(--border-color)] transition-all group">
+              <div class="flex items-center gap-2.5">
+                <div class="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs group-hover:scale-105 transition-transform">
+                  <i class="bi bi-clock-history"></i>
+                </div>
+                <span>Historial completo</span>
+              </div>
+              <i class="bi bi-chevron-right text-xs text-slate-400 group-hover:translate-x-0.5 transition-transform"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- 3. ZONA INFERIOR: Perfil, Modo claro/oscuro, Información usuario y Cierre de sesión -->
+        <div class="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] space-y-2 shrink-0">
+          <!-- Acceso al perfil -->
+          <a
+            routerLink="/profile"
+            routerLinkActive="active-nav"
+            class="nav-item flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2.5">
+              <i class="bi bi-person-circle text-base text-slate-500 dark:text-slate-400"></i>
+              <span>Mi perfil</span>
+            </div>
+            <span class="text-[10px] text-slate-400 dark:text-slate-500">Configuración</span>
+          </a>
+
+          <!-- Admin links si es administrador -->
+          <ng-container *ngIf="isAdmin">
+            <div class="pt-1.5 pb-1 border-t border-[var(--border-color)] space-y-1">
+              <div class="px-2 flex items-center justify-between">
+                <span class="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Investigación & PLN</span>
+                <span class="text-[9px] font-bold text-amber-600 dark:text-amber-400">Admin</span>
+              </div>
+              <div class="grid grid-cols-2 gap-1">
+                <a routerLink="/dashboard" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                  <i class="bi bi-grid text-xs text-emerald-600 dark:text-emerald-400"></i>
+                  <span class="truncate">Dashboard</span>
+                </a>
+                <a routerLink="/modismos" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                  <i class="bi bi-translate text-xs text-amber-500"></i>
+                  <span class="truncate">Modismos</span>
+                </a>
+                <a routerLink="/metrics" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                  <i class="bi bi-graph-up text-xs text-emerald-600 dark:text-emerald-400"></i>
+                  <span class="truncate">Métricas</span>
+                </a>
+                <a routerLink="/history-global" routerLinkActive="active-nav" class="px-2 py-1.5 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 hover:bg-[var(--bg-card-hover)] flex items-center gap-1.5 truncate">
+                  <i class="bi bi-collection text-xs text-teal-600 dark:text-teal-400"></i>
+                  <span class="truncate">Global</span>
+                </a>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Control de Modo Claro/Oscuro -->
+          <button
+            (click)="toggleTheme()"
+            [attr.aria-label]="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+            class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-[var(--border-color)] transition-all">
+            <div class="flex items-center gap-2">
+              <i [class]="isDark ? 'bi bi-moon-stars-fill text-amber-400' : 'bi bi-sun-fill text-amber-500'" class="text-sm"></i>
+              <span>{{ isDark ? 'Modo Oscuro' : 'Modo Claro' }}</span>
+            </div>
+            <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+              {{ isDark ? 'Oscuro' : 'Claro' }}
+            </span>
+          </button>
+
+          <!-- Información de usuario y cierre de sesión -->
+          <div class="pt-1.5 border-t border-[var(--border-color)] flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+              <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-xs border border-emerald-400/40">
+                {{ userInitial }}
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">{{ userName }}</p>
+                <p class="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium truncate">{{ userRole }}</p>
+              </div>
             </div>
             <button
-              *ngFor="let conv of group.conversations"
-              (click)="selectConversation(conv.id_conversacion)"
-              [class.active-conv]="activeConversationId === conv.id_conversacion"
-              [title]="conv.titulo"
-              class="conversation-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all text-left">
-              <i [class]="activeConversationId === conv.id_conversacion ? 'bi bi-chat-square-fill text-emerald-600 dark:text-sky-400' : 'bi bi-chat-square-text text-slate-400'" class="text-xs shrink-0"></i>
-              <span class="truncate flex-1">{{ conv.titulo || 'Nueva conversación' }}</span>
+              (click)="logout()"
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+              class="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors shrink-0">
+              <i class="bi bi-box-arrow-right text-base"></i>
             </button>
           </div>
         </div>
 
-        <!-- Institutional Navigation Links -->
-        <nav class="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] space-y-1">
-          <a routerLink="/chat" routerLinkActive="active-nav" class="nav-item">
-            <i class="bi bi-chat-square-text text-base"></i>
-            <span>Chat principal</span>
-          </a>
-
-          <a routerLink="/history" routerLinkActive="active-nav" class="nav-item">
-            <i class="bi bi-clock-history text-base"></i>
-            <span>Historial completo</span>
-          </a>
-
-          <a routerLink="/profile" routerLinkActive="active-nav" class="nav-item">
-            <i class="bi bi-person text-base"></i>
-            <span>Perfil</span>
-          </a>
-
-          <ng-container *ngIf="isAdmin">
-            <div class="pt-2 pb-1 px-3">
-              <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Investigación & PLN</span>
-            </div>
-
-            <a routerLink="/dashboard" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-grid text-base"></i>
-              <span>Dashboard</span>
-            </a>
-
-            <a routerLink="/modismos" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-translate text-base"></i>
-              <span>Modismos</span>
-            </a>
-
-            <a routerLink="/metrics" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-graph-up-arrow text-base"></i>
-              <span>Métricas</span>
-            </a>
-
-            <a routerLink="/history-global" routerLinkActive="active-nav" class="nav-item">
-              <i class="bi bi-collection text-base"></i>
-              <span>Historial global</span>
-            </a>
-          </ng-container>
-        </nav>
       </div>
 
       <!-- COLLAPSED DESKTOP VIEW (w-16) -->
       <div *ngIf="isCollapsed" class="flex-1 flex flex-col items-center py-4 space-y-4 overflow-y-auto">
         <!-- Logo & Expand Button -->
         <div class="flex flex-col items-center gap-2">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-sky-500 dark:from-sky-500 dark:to-blue-600 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 dark:shadow-sky-500/20">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-600/20">
             <i class="bi bi-cpu-fill text-lg"></i>
           </div>
           <button
@@ -380,7 +631,7 @@ export interface ConversationGroup {
         <button
           (click)="newConversation()"
           title="Nueva conversación"
-          class="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-sky-500 dark:hover:bg-sky-400 text-white dark:text-slate-950 flex items-center justify-center shadow-sm transition-all">
+          class="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-xs transition-all">
           <i class="bi bi-plus-lg text-lg"></i>
         </button>
 
@@ -420,7 +671,7 @@ export interface ConversationGroup {
             </a>
 
             <a routerLink="/metrics" routerLinkActive="active-collapsed" title="Métricas" class="icon-nav">
-              <i class="bi bi-graph-up-arrow text-lg"></i>
+              <i class="bi bi-graph-up text-lg"></i>
             </a>
 
             <a routerLink="/history-global" routerLinkActive="active-collapsed" title="Historial global" class="icon-nav">
@@ -430,43 +681,8 @@ export interface ConversationGroup {
         </div>
       </div>
 
-      <!-- DESKTOP FOOTER -->
-      <!-- Expanded Footer -->
-      <div *ngIf="!isCollapsed" class="p-3 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] space-y-2">
-        <button
-          (click)="toggleTheme()"
-          [attr.aria-label]="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
-          class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-[var(--border-color)] transition-all">
-          <div class="flex items-center gap-2.5">
-            <i [class]="isDark ? 'bi bi-moon-stars-fill text-amber-400' : 'bi bi-sun-fill text-amber-500'" class="text-sm"></i>
-            <span>{{ isDark ? 'Modo Oscuro' : 'Modo Claro' }}</span>
-          </div>
-          <span class="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-            {{ isDark ? 'Oscuro' : 'Claro' }}
-          </span>
-        </button>
-
-        <div class="pt-1 flex items-center justify-between">
-          <div class="flex items-center gap-2.5 overflow-hidden">
-            <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300/60 dark:bg-sky-900/60 dark:text-sky-300 dark:border-sky-500/40 font-bold flex items-center justify-center text-xs shrink-0">
-              {{ userInitial }}
-            </div>
-            <div class="truncate">
-              <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{{ userName }}</p>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">{{ userRole }}</p>
-            </div>
-          </div>
-          <button
-            (click)="logout()"
-            title="Cerrar sesión"
-            class="p-2 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0">
-            <i class="bi bi-box-arrow-right text-base"></i>
-          </button>
-        </div>
-      </div>
-
       <!-- Collapsed Footer (icon rail) -->
-      <div *ngIf="isCollapsed" class="p-2 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] flex flex-col items-center space-y-2">
+      <div *ngIf="isCollapsed" class="p-2 border-t border-[var(--border-color)] bg-[var(--bg-sidebar)] flex flex-col items-center space-y-2 shrink-0">
         <button
           (click)="toggleTheme()"
           [title]="isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
@@ -476,29 +692,69 @@ export interface ConversationGroup {
 
         <div
           [title]="userName + ' (' + userRole + ')'"
-          class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300/60 dark:bg-sky-900/60 dark:text-sky-300 dark:border-sky-500/40 font-bold flex items-center justify-center text-xs shrink-0 cursor-default">
+          class="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 text-white font-bold flex items-center justify-center text-xs shrink-0 cursor-default shadow-xs border border-emerald-400/40">
           {{ userInitial }}
         </div>
 
         <button
           (click)="logout()"
           title="Cerrar sesión"
-          class="w-10 h-10 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 rounded-xl flex items-center justify-center transition-colors">
+          class="w-10 h-10 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-xl flex items-center justify-center transition-colors">
           <i class="bi bi-box-arrow-right text-base"></i>
         </button>
       </div>
 
     </aside>
+
+    <!-- Modal de confirmación de eliminación -->
+    <div
+      *ngIf="convAEliminar"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      (click)="cancelarEliminar()">
+      <div
+        class="w-full max-w-sm rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] p-5 shadow-2xl space-y-4"
+        (click)="$event.stopPropagation()">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center text-lg shrink-0">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">¿Eliminar conversación?</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Esta acción es permanente y no se puede deshacer.</p>
+          </div>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-[var(--border-color)] truncate font-mono">
+          "{{ convAEliminar.titulo }}"
+        </p>
+        <div class="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            (click)="cancelarEliminar()"
+            [disabled]="isDeleting"
+            class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            (click)="ejecutarEliminar()"
+            [disabled]="isDeleting"
+            class="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50">
+            <i *ngIf="isDeleting" class="bi bi-arrow-repeat animate-spin"></i>
+            <span>{{ isDeleting ? 'Eliminando...' : 'Eliminar definitivamente' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
     .nav-item {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 9px 12px;
+      padding: 8px 12px;
       color: var(--text-muted);
       border-radius: 10px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 500;
       transition: all 0.15s ease;
       text-decoration: none;
@@ -508,16 +764,16 @@ export interface ConversationGroup {
       color: var(--text-main);
     }
     .active-nav {
-      background-color: var(--upec-green-light) !important;
-      color: var(--upec-green) !important;
+      background-color: rgba(5, 150, 105, 0.12) !important;
+      color: #059669 !important;
       font-weight: 600;
-      border-left: 3px solid var(--upec-green);
+      border-left: 3px solid #059669;
     }
     :host-context(.dark) .active-nav,
     .dark .active-nav {
-      background-color: rgba(56, 189, 248, 0.12) !important;
-      color: #38bdf8 !important;
-      border-left: 3px solid #38bdf8;
+      background-color: rgba(16, 185, 129, 0.16) !important;
+      color: #10b981 !important;
+      border-left: 3px solid #10b981;
     }
     .icon-nav {
       display: flex;
@@ -535,18 +791,18 @@ export interface ConversationGroup {
       color: var(--text-main);
     }
     .active-collapsed {
-      background-color: var(--upec-green-light) !important;
-      color: var(--upec-green) !important;
+      background-color: rgba(5, 150, 105, 0.14) !important;
+      color: #059669 !important;
     }
     :host-context(.dark) .active-collapsed,
     .dark .active-collapsed {
-      background-color: rgba(56, 189, 248, 0.14) !important;
-      color: #38bdf8 !important;
+      background-color: rgba(16, 185, 129, 0.18) !important;
+      color: #10b981 !important;
     }
     .conversation-item {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       padding: 7px 10px;
       color: var(--text-muted);
       border-radius: 9px;
@@ -564,16 +820,16 @@ export interface ConversationGroup {
       color: var(--text-main);
     }
     .active-conv {
-      background-color: var(--upec-green-light) !important;
-      color: var(--upec-green) !important;
+      background-color: rgba(5, 150, 105, 0.12) !important;
+      color: #059669 !important;
       font-weight: 600;
-      border-left: 3px solid var(--upec-green) !important;
+      border-left: 3px solid #059669 !important;
     }
     :host-context(.dark) .active-conv,
     .dark .active-conv {
-      background-color: rgba(56, 189, 248, 0.12) !important;
-      color: #38bdf8 !important;
-      border-left: 3px solid #38bdf8 !important;
+      background-color: rgba(16, 185, 129, 0.16) !important;
+      color: #10b981 !important;
+      border-left: 3px solid #10b981 !important;
     }
   `]
 })
@@ -586,6 +842,10 @@ export class SidebarComponent implements OnInit, OnDestroy {
   activeConversationId: number | null = null;
   isChatPage: boolean = false;
 
+  menuOpenId: number | null = null;
+  convAEliminar: ConversacionItem | null = null;
+  isDeleting: boolean = false;
+
   private subs = new Subscription();
 
   constructor(
@@ -595,6 +855,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
     public sidebarService: SidebarService,
     private router: Router
   ) {}
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.menuOpenId = null;
+  }
 
   get isDark(): boolean {
     return this.themeService.isDark();
@@ -666,8 +931,11 @@ export class SidebarComponent implements OnInit, OnDestroy {
           titulo: item.titulo || 'Nueva conversación',
           fecha_creacion: item.fecha_creacion,
           fecha_actualizacion: item.fecha_actualizacion,
+          fijada: Boolean(item.fijada),
           total_mensajes: item.total_mensajes
         })).sort((a: ConversacionItem, b: ConversacionItem) => {
+          if (a.fijada && !b.fijada) return -1;
+          if (!a.fijada && b.fijada) return 1;
           const timeA = new Date(a.fecha_actualizacion || a.fecha_creacion).getTime();
           const timeB = new Date(b.fecha_actualizacion || b.fecha_creacion).getTime();
           return timeB - timeA;
@@ -690,8 +958,16 @@ export class SidebarComponent implements OnInit, OnDestroy {
     );
   }
 
-  get groupedConversations(): ConversationGroup[] {
-    return this.groupConversations(this.filteredConversations);
+  get fijadasConversations(): ConversacionItem[] {
+    return this.filteredConversations.filter(c => Boolean(c.fijada));
+  }
+
+  get recientesConversations(): ConversacionItem[] {
+    return this.filteredConversations.filter(c => !c.fijada);
+  }
+
+  get groupedRecientes(): ConversationGroup[] {
+    return this.groupConversations(this.recientesConversations);
   }
 
   groupConversations(items: ConversacionItem[]): ConversationGroup[] {
@@ -734,6 +1010,7 @@ export class SidebarComponent implements OnInit, OnDestroy {
 
   newConversation(): void {
     this.sidebarService.triggerNewConversation();
+    this.sidebarService.closeMobile();
     this.router.navigate(['/chat']);
   }
 
@@ -767,5 +1044,58 @@ export class SidebarComponent implements OnInit, OnDestroy {
   logout(): void {
     this.sidebarService.closeMobile();
     this.authService.logout();
+  }
+
+  toggleMenu(event: Event, id: number): void {
+    event.stopPropagation();
+    this.menuOpenId = this.menuOpenId === id ? null : id;
+  }
+
+  toggleFijar(conv: ConversacionItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.menuOpenId = null;
+    const nuevoEstado = !conv.fijada;
+    this.assistantService.toggleFijarConversacion(conv.id_conversacion, nuevoEstado).subscribe({
+      next: (res) => {
+        conv.fijada = res.fijada;
+        this.cargarConversaciones();
+      },
+      error: (err) => {
+        console.error('Error al cambiar fijado de conversación:', err);
+      }
+    });
+  }
+
+  confirmarEliminar(conv: ConversacionItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.menuOpenId = null;
+    this.convAEliminar = conv;
+  }
+
+  cancelarEliminar(): void {
+    this.convAEliminar = null;
+    this.isDeleting = false;
+  }
+
+  ejecutarEliminar(): void {
+    if (!this.convAEliminar) return;
+    const id = this.convAEliminar.id_conversacion;
+    this.isDeleting = true;
+    this.assistantService.eliminarConversacion(id).subscribe({
+      next: () => {
+        this.isDeleting = false;
+        const eraActiva = this.activeConversationId === id;
+        this.convAEliminar = null;
+        this.cargarConversaciones();
+        if (eraActiva) {
+          this.router.navigate(['/chat']);
+        }
+      },
+      error: (err) => {
+        this.isDeleting = false;
+        console.error('Error al eliminar conversación:', err);
+        alert('No se pudo eliminar la conversación. Intente nuevamente.');
+      }
+    });
   }
 }

@@ -82,7 +82,7 @@ class ConversacionResumenSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Conversacion
-        fields = ['id_conversacion', 'titulo', 'fecha_creacion', 'fecha_actualizacion', 'total_mensajes']
+        fields = ['id_conversacion', 'titulo', 'fecha_creacion', 'fecha_actualizacion', 'fijada', 'total_mensajes']
 
 
 class ConversacionDetalleSerializer(serializers.ModelSerializer):
@@ -90,7 +90,7 @@ class ConversacionDetalleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Conversacion
-        fields = ['id_conversacion', 'titulo', 'fecha_creacion', 'fecha_actualizacion', 'mensajes']
+        fields = ['id_conversacion', 'titulo', 'fecha_creacion', 'fecha_actualizacion', 'fijada', 'mensajes']
 
     def get_mensajes(self, obj):
         mensajes = []
