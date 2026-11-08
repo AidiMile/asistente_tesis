@@ -1,4 +1,5 @@
 from rest_framework import generics, permissions, filters
+from rest_framework.throttling import ScopedRateThrottle
 from django.db.models import Q
 from .models import Modismo
 from .serializers import ModismoSerializer
@@ -8,6 +9,8 @@ class ModismoListCreateView(generics.ListCreateAPIView):
     queryset = Modismo.objects.prefetch_related('significados', 'ejemplos').all()
     serializer_class = ModismoSerializer
     permission_classes = [EsAdministradorOEsLectura]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'modismos'
     filter_backends = [filters.SearchFilter]
     search_fields = ['nombre_modismo', 'descripcion', 'region', 'significados__significado']
 

@@ -1,6 +1,8 @@
+import re
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework import generics, permissions, status
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Avg, Count, Prefetch
@@ -24,6 +26,47 @@ from apps.authentication.permissions import EsAdministrador, es_administrador
 
 class GenerarTextoAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'generar_texto'
+
+    @staticmethod
+    def _calcular_max_tokens_adaptable(texto: str) -> int:
+        """
+        Calcula un límite de generación conservador y adaptable según la naturaleza de la consulta,
+        calibrado para evitar timeouts en CPU dual-core (180-220 tokens máx para explicaciones).
+        """
+        t = (texto or "").strip().lower()
+        if not t:
+            return 140
+
+        # Patrones que requieren explicación detallada o desarrollo conceptual
+        patrones_explicativos = [
+            r'qu[eé]\s+es', r'qu[eé]\s+son', r'expl[ií]ca', r'c[oó]mo\s+funciona', r'c[oó]mo\s+puedo',
+            r'c[oó]mo\s+se\s+hace', r'por\s+qu[eé]', r'diferencia\s+entre', r'resumen', r'resume',
+            r'desarrolla', r'describe', r'consejos', r'estrategias', r'pasos\s+para', r'ensayo',
+            r'gu[ií]a', r'redes?\s+neuronales?', r'procesamiento\s+del\s+lenguaje', r'inteligencia\s+artificial',
+            r'segundo\s+punto', r'primer\s+punto', r'tercer\s+punto', r'punto\s+anterior', r'respuesta\s+anterior',
+            r'nuevamente', r'profundiza', r'ahorrar', r'estudiar', r'aprender', r'm[eé]todos?'
+        ]
+
+        # Si coincide con intención explicativa o si la pregunta es sustantiva (> 50 caracteres)
+        requiere_explicacion = any(re.search(p, t) for p in patrones_explicativos) or len(t) > 50
+
+        # Si es un cálculo aritmético directo simple o saludo muy breve
+        es_calculo_o_saludo = any(re.search(rf'\b{p}\b', t) for p in [
+            'hola', 'buenos d[ií]as', 'buenas tardes', 'buenas noches', 'qu[eé] tal',
+            'multiplicado', 'dividido', 'sumado', 'restado', r'cu[aá]nto es \d+'
+        ]) and len(t) < 40
+
+        if es_calculo_o_saludo and not requiere_explicacion:
+            return 80
+
+        if requiere_explicacion:
+            # Presupuesto calibrado para consultas explicativas (130 tokens): ~35-45s en CPU sin riesgo de timeout
+            return 130
+
+        # Presupuesto para conversación cotidiana (90 tokens): ~25-30s en CPU
+        return 90
 
     def post(self, request):
         serializer = GenerarTextoRequestSerializer(data=request.data)
@@ -33,16 +76,20 @@ class GenerarTextoAPIView(APIView):
         data = serializer.validated_data
         texto = data['texto']
         tipo_entrada = data['tipo_entrada']
-        # El servidor ignora parámetros manipulados por usuarios sin permisos.
+
+        # El servidor protege parámetros para evitar abusos o desbordamiento en CPU.
+        tokens_adaptados = self._calcular_max_tokens_adaptable(texto)
         if es_administrador(request.user):
             temperatura = data['temperatura']
             top_p = data['top_p']
-            max_tokens = data['max_tokens']
+            max_tokens_req = data['max_tokens']
+            # Si el administrador usa el valor por defecto (250), adaptarlo al presupuesto calibrado
+            max_tokens = tokens_adaptados if max_tokens_req == 250 else max_tokens_req
         else:
-            # Parámetros equilibrados para propósito general (evitan respuestas truncadas en CPU)
+            # Estudiante: parámetros calibrados con límite adaptable conservador (máx 500 para explicaciones)
             temperatura = 0.6
             top_p = 0.9
-            max_tokens = 250
+            max_tokens = tokens_adaptados
 
         id_conversacion = data.get('id_conversacion')
         if id_conversacion:

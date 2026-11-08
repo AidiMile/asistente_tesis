@@ -1,4 +1,5 @@
 import logging
+import re
 from django.conf import settings
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
@@ -96,6 +97,8 @@ def build_password_reset_email_plain(nombre: str, reset_url: str, timeout_hours:
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
 
 class RegistroView(generics.CreateAPIView):
@@ -123,31 +126,58 @@ class PasswordResetRequestView(APIView):
         correo = serializer.validated_data['correo'].strip().lower()
 
         # Buscar usuario sin revelar externamente si existe o no
-        user = Usuario.objects.filter(correo__iexact=correo, is_active=True).first()
+        user = Usuario.objects.filter(correo__iexact=correo).first()
         if user:
-            token = default_token_generator.make_token(user)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:8080').rstrip('/')
-            # Enlace compatible con HashLocationStrategy de Angular (/#/reset-password)
-            reset_url = f"{frontend_url}/#/reset-password?uid={uid}&token={token}"
+            rol = getattr(getattr(user, 'perfil', None), 'rol', 'Estudiante')
 
-            timeout_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600 or 1
-            html_content = build_password_reset_email_html(user.nombre, reset_url, timeout_hours)
-            plain_content = build_password_reset_email_plain(user.nombre, reset_url, timeout_hours)
+            # Seguridad estricta: solo se permite la recuperación si la cuenta está completamente activa y habilitada
+            # Jamás se reactivan cuentas deshabilitadas ni se modifican sus estados durante la recuperación
+            if user.is_active and user.estado == 'Activo':
+                token = default_token_generator.make_token(user)
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:8080').rstrip('/')
+                # Enlace compatible con HashLocationStrategy de Angular (/#/reset-password)
+                reset_url = f"{frontend_url}/#/reset-password?uid={uid}&token={token}"
 
-            try:
-                send_mail(
-                    subject='Restablecimiento de contraseña - Asistente Virtual PLN-EC',
-                    message=plain_content,
-                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'soporte@upec.edu.ec'),
-                    recipient_list=[user.correo],
-                    html_message=html_content,
-                    fail_silently=False,
+                timeout_hours = getattr(settings, 'PASSWORD_RESET_TIMEOUT', 3600) // 3600 or 1
+                html_content = build_password_reset_email_html(user.nombre, reset_url, timeout_hours)
+                plain_content = build_password_reset_email_plain(user.nombre, reset_url, timeout_hours)
+
+                from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'Asistente Virtual PLN-EC <soporte@upec.edu.ec>'
+
+                try:
+                    res = send_mail(
+                        subject='Restablecimiento de contraseña - Asistente Virtual PLN-EC',
+                        message=plain_content,
+                        from_email=from_email,
+                        recipient_list=[user.correo],
+                        html_message=html_content,
+                        fail_silently=False,
+                    )
+                    if res > 0:
+                        logger.info(
+                            "[AUTH-RESET] Correo de restablecimiento aceptado por servidor SMTP para usuario id=%s (rol=%s)",
+                            user.id_usuario, rol
+                        )
+                    else:
+                        logger.error(
+                            "[AUTH-RESET] Servidor SMTP no aceptó el mensaje para usuario id=%s (rol=%s, res=%s)",
+                            user.id_usuario, rol, res
+                        )
+                except Exception as e:
+                    # Se registra de forma segura el error sanitizado sin exponer credenciales ni tokens
+                    msg_sanitizado = re.sub(r'(?:password|token|key|secret)[=:\s]\s*\S+', '***', str(e), flags=re.IGNORECASE)
+                    logger.error(
+                        "[AUTH-RESET] Fallo en envío SMTP para usuario id=%s (rol=%s): %s - %s",
+                        user.id_usuario, rol, type(e).__name__, msg_sanitizado
+                    )
+            else:
+                logger.warning(
+                    "[AUTH-RESET] Solicitud rechazada: cuenta de usuario id=%s (rol=%s, is_active=%s, estado=%s) deshabilitada/inactiva. No se reactiva.",
+                    user.id_usuario, rol, user.is_active, user.estado
                 )
-                logger.info("Correo de restablecimiento procesado para usuario id=%s", user.id_usuario)
-            except Exception as e:
-                # Se registra únicamente el tipo de error sin exponer datos sensibles ni credenciales
-                logger.error("Error al despachar correo de restablecimiento: %s", type(e).__name__)
+        else:
+            logger.info("[AUTH-RESET] Solicitud procesada para correo no registrado en la base de datos.")
 
         # Respuesta genérica para evitar enumeración de usuarios
         return Response({
@@ -163,10 +193,14 @@ class PasswordResetValidateTokenView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = PasswordResetTokenValidateSerializer(data=request.data)
         if not serializer.is_valid():
+            logger.warning("[AUTH-RESET] Intento de validación con token inválido o expirado.")
             return Response(
                 {"valid": False, "detail": "El enlace de recuperación es inválido o ha expirado."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        user = serializer.validated_data.get('user')
+        user_id = user.id_usuario if user else 'desconocido'
+        logger.info("[AUTH-RESET] Token de recuperación validado exitosamente para usuario id=%s.", user_id)
         return Response({"valid": True, "detail": "El enlace de recuperación es válido."}, status=status.HTTP_200_OK)
 
 
@@ -178,7 +212,12 @@ class PasswordResetConfirmView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        user = serializer.save()
+        rol = getattr(getattr(user, 'perfil', None), 'rol', 'Estudiante')
+        logger.info(
+            "[AUTH-RESET] Contraseña restablecida exitosamente para usuario id=%s (rol=%s). Token consumido.",
+            user.id_usuario, rol
+        )
         return Response({
             "detail": "Tu contraseña ha sido restablecida exitosamente. Ya puedes iniciar sesión con tu nueva contraseña."
         }, status=status.HTTP_200_OK)

@@ -6,6 +6,9 @@
 !.env.example
 
 # Respaldos y temporales
+backups_fase1/
+.tunnel_host
+*.tunnel_host
 *.bak
 *.bak*
 *.bak_*

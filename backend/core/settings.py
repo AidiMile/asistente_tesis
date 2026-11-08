@@ -6,9 +6,40 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
+_raw_allowed = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+ALLOWED_HOSTS = [h.strip() for h in _raw_allowed.split(',') if h.strip() and h.strip() != '*']
+for _h in ['localhost', '127.0.0.1', 'testserver']:
+    if _h not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_h)
+
+_raw_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080')
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _raw_csrf.split(',') if o.strip()]
+
+# Integración defensiva con Cloudflare Quick Tunnel (sin comodines '*')
+_tunnel_file = BASE_DIR / '.tunnel_host'
+if _tunnel_file.exists():
+    try:
+        _t_host = _tunnel_file.read_text().strip().lower()
+        if _t_host and _t_host.endswith('.trycloudflare.com') and '*' not in _t_host:
+            if _t_host not in ALLOWED_HOSTS:
+                ALLOWED_HOSTS.append(_t_host)
+            _t_origin = f'https://{_t_host}'
+            if _t_origin not in CSRF_TRUSTED_ORIGINS:
+                CSRF_TRUSTED_ORIGINS.append(_t_origin)
+    except Exception:
+        pass
+
+# Cabecera para proxy inverso de confianza (Cloudflare / Nginx)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Configuración defensiva de cookies y cabeceras de seguridad
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() in ('true', '1', 'yes')
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False').lower() in ('true', '1', 'yes')
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -117,9 +148,12 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '200/day',
-        'user': '2000/day',
+        'anon': '100/day',
+        'user': '1000/day',
+        'login': '10/minute',
         'password_reset': '5/minute',
+        'generar_texto': '15/minute',
+        'modismos': '60/minute',
     },
 }
 
@@ -130,6 +164,7 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes
 EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 'yes')
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '').strip()
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '').strip()
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', 15))
 
 # Selección de Backend: si se configuran credenciales SMTP, se usa smtp.EmailBackend; si no, consola para desarrollo seguro.
 _default_backend = 'django.core.mail.backends.smtp.EmailBackend' if (EMAIL_HOST_USER and EMAIL_HOST_PASSWORD) else 'django.core.mail.backends.console.EmailBackend'
@@ -147,6 +182,43 @@ else:
 
 # URL pública de Frontend para enlaces de recuperación
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:8080')
+if _tunnel_file.exists():
+    try:
+        _t_host = _tunnel_file.read_text().strip().lower()
+        if _t_host and _t_host.endswith('.trycloudflare.com') and '*' not in _t_host:
+            FRONTEND_URL = f'https://{_t_host}'
+    except Exception:
+        pass
+
+# Configuración de Logging para trazabilidad de autenticación y diagnóstico seguro
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'loggers': {
+        'apps.authentication': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'apps.asistente': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id_usuario',
@@ -159,18 +231,12 @@ SIMPLE_JWT = {
 }
 
 # Configuración CORS para Angular
-CORS_ALLOW_ALL_ORIGINS = True  # O configurar orígenes específicos para producción
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:4200',
-    'http://127.0.0.1:4200',
-    'http://localhost:8080',
-    'http://127.0.0.1:8080',
-    'http://localhost:80',
-    'http://127.0.0.1:80',
-]
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+_raw_cors = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:4200,http://127.0.0.1:4200')
+CORS_ALLOWED_ORIGINS = [c.strip() for c in _raw_cors.split(',') if c.strip()]
 CORS_ALLOW_CREDENTIALS = True
 
 # Configuración del Motor Ollama (Redes Neuronales / LLM)
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://ollama:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen2.5:1.5b')
-OLLAMA_KEEP_ALIVE = os.getenv('OLLAMA_KEEP_ALIVE', '60m')
+OLLAMA_KEEP_ALIVE = os.getenv('OLLAMA_KEEP_ALIVE', '30m')

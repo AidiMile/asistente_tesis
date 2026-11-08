@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Debes configurar POSTGRES_PASSWORD en el archivo .env}
       POSTGRES_DB: ${POSTGRES_DB:-asistente_db}
-    ports: [ "5432:5432" ]
+    # Puerto interno 5432 aislado: no se publica hacia el host para máxima seguridad
     volumes: [ "postgres_data:/var/lib/postgresql/data" ]
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-asistente_db}" ]
@@ -20,13 +20,13 @@ services:
     container_name: ollama_nlp_ec
     restart: unless-stopped
     entrypoint: [ "/bin/sh", "/setup_models.sh" ]
-    ports: [ "11434:11434" ]
+    # Puerto interno 11434 aislado: comunicación exclusiva dentro de la red Docker privada
     volumes:
       - ollama_models:/root/.ollama
       - ./ollama/Modelfile:/Modelfile:ro
       - ./ollama/setup_models.sh:/setup_models.sh:ro
     environment:
-      OLLAMA_KEEP_ALIVE: 60m
+      OLLAMA_KEEP_ALIVE: 30m
       OLLAMA_CONTEXT_LENGTH: 2048
     healthcheck:
       test: [ "CMD-SHELL", "test -f /tmp/model-ready && ollama list >/dev/null" ]
@@ -45,7 +45,7 @@ services:
              python manage.py ensure_admin &&
              gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 180"
     volumes: [ "./backend:/app" ]
-    ports: [ "8000:8000" ]
+    ports: [ "127.0.0.1:8000:8000" ]
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Configura DJANGO_SECRET_KEY en el archivo .env}
       DEBUG: ${DEBUG:-True}
@@ -56,7 +56,7 @@ services:
       POSTGRES_PORT: 5432
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-60m}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plnec.ec}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Configura ADMIN_PASSWORD en el archivo .env}
       ADMIN_NAME: ${ADMIN_NAME:-Administradoras PLN-EC}
@@ -83,7 +83,7 @@ services:
     build: ./frontend
     container_name: angular_asistente_frontend
     restart: unless-stopped
-    ports: [ "8080:80" ]
+    ports: [ "127.0.0.1:8080:80" ]
     depends_on:
       backend: { condition: service_healthy }
 

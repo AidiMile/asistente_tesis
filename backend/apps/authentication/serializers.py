@@ -43,6 +43,13 @@ class RegistroSerializer(serializers.ModelSerializer):
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
+        # Normalización defensiva de correo para evitar rechazos por mayúsculas o espacios accidentales
+        username_field = self.username_field
+        if username_field in attrs and isinstance(attrs[username_field], str):
+            attrs[username_field] = attrs[username_field].strip().lower()
+        if 'correo' in attrs and isinstance(attrs['correo'], str):
+            attrs['correo'] = attrs['correo'].strip().lower()
+
         data = super().validate(attrs)
         data['user'] = {
             'id': self.user.id_usuario,
@@ -68,8 +75,9 @@ class PasswordResetTokenValidateSerializer(serializers.Serializer):
         except (TypeError, ValueError, OverflowError, Usuario.DoesNotExist):
             raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
 
-        if not user.is_active:
-            raise serializers.ValidationError({"detail": "La cuenta de usuario está inactiva."})
+        # Seguridad estricta: verificar que la cuenta esté activa y habilitada sin mutar estados
+        if not (user.is_active and user.estado == 'Activo'):
+            raise serializers.ValidationError({"detail": "La cuenta de usuario se encuentra deshabilitada o inactiva."})
 
         if not default_token_generator.check_token(user, attrs['token']):
             raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
@@ -94,8 +102,9 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         except (TypeError, ValueError, OverflowError, Usuario.DoesNotExist):
             raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
 
-        if not user.is_active:
-            raise serializers.ValidationError({"detail": "La cuenta de usuario está inactiva."})
+        # Seguridad estricta: verificar que la cuenta esté activa y habilitada sin mutar estados
+        if not (user.is_active and user.estado == 'Activo'):
+            raise serializers.ValidationError({"detail": "La cuenta de usuario se encuentra deshabilitada o inactiva."})
 
         if not default_token_generator.check_token(user, attrs['token']):
             raise serializers.ValidationError({"detail": "El enlace de recuperación es inválido o ha expirado."})
