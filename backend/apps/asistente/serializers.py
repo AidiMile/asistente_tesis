@@ -49,6 +49,20 @@ class GenerarTextoRequestSerializer(serializers.Serializer):
     max_tokens = serializers.IntegerField(required=False, default=250, min_value=20, max_value=800)
 
 
+class EditarConsultaRequestSerializer(serializers.Serializer):
+    texto = serializers.CharField(max_length=1000, trim_whitespace=True)
+    confirmar_truncado = serializers.BooleanField(required=False, default=False)
+    temperatura = serializers.FloatField(required=False, default=0.7, min_value=0.0, max_value=1.5)
+    top_p = serializers.FloatField(required=False, default=0.9, min_value=0.0, max_value=1.0)
+    max_tokens = serializers.IntegerField(required=False, default=250, min_value=20, max_value=800)
+
+    def validate_texto(self, value):
+        cleaned = (value or '').strip()
+        if not cleaned:
+            raise serializers.ValidationError("El texto de la consulta no puede estar vacío.")
+        return cleaned
+
+
 class ParametroModeloSerializer(serializers.ModelSerializer):
     class Meta:
         model = ParametroModelo
@@ -94,14 +108,22 @@ class ConversacionDetalleSerializer(serializers.ModelSerializer):
 
     def get_mensajes(self, obj):
         mensajes = []
-        for consulta in obj.consultas.all():
+        consultas_ordenadas = sorted(
+            obj.consultas.all(),
+            key=lambda c: (c.fecha_consulta, c.id_consulta)
+        )
+        for consulta in consultas_ordenadas:
             mensajes.append({
                 'id': consulta.id_consulta,
                 'sender': 'user',
                 'text': consulta.texto_consulta,
                 'timestamp': consulta.fecha_consulta,
             })
-            for respuesta in consulta.respuestas.all():
+            respuestas_ordenadas = sorted(
+                consulta.respuestas.all(),
+                key=lambda r: (r.fecha_respuesta, r.id_respuesta)
+            )
+            for respuesta in respuestas_ordenadas:
                 evaluacion = getattr(respuesta, 'evaluacion', None)
                 texto_resp = respuesta.texto_generado or ''
                 obs_eval = (evaluacion.observaciones or '') if evaluacion else ''

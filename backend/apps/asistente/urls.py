@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     GenerarTextoAPIView,
+    EditarConsultaAPIView,
     HistorialUsuarioAPIView,
     HistorialGlobalAPIView,
     ParametrosModeloAPIView,
@@ -12,6 +13,7 @@ from .views import (
 
 urlpatterns = [
     path('generar/', GenerarTextoAPIView.as_view(), name='generar_texto'),
+    path('consultas/<int:id_consulta>/editar/', EditarConsultaAPIView.as_view(), name='editar_consulta'),
     path('conversaciones/', ConversacionListCreateAPIView.as_view(), name='conversaciones'),
     path('conversaciones/<int:id_conversacion>/', ConversacionDetalleAPIView.as_view(), name='conversacion_detalle'),
     path('conversaciones/<int:id_conversacion>/fijar/', ConversacionFijarAPIView.as_view(), name='conversacion_fijar'),

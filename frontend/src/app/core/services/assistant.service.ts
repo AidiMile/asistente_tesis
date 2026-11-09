@@ -46,6 +46,21 @@ export class AssistantService {
     }, { headers: this.getHeaders() });
   }
 
+  editarConsulta(
+    idConsulta: number,
+    texto: string,
+    confirmarTruncado: boolean = false,
+    params?: { temperatura?: number; top_p?: number; max_tokens?: number }
+  ): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/consultas/${idConsulta}/editar/`, {
+      texto,
+      confirmar_truncado: confirmarTruncado,
+      temperatura: params?.temperatura ?? 0.7,
+      top_p: params?.top_p ?? 0.9,
+      max_tokens: params?.max_tokens ?? 250
+    }, { headers: this.getHeaders() });
+  }
+
   getHistorial(): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/historial/`, { headers: this.getHeaders() });
   }
