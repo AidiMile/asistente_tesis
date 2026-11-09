@@ -230,11 +230,23 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# Configuración CORS para Angular
-CORS_ALLOW_ALL_ORIGINS = DEBUG
-_raw_cors = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:4200,http://127.0.0.1:4200')
+# Configuración CORS para Angular y Flutter
+CORS_ALLOW_ALL_ORIGINS = True
+_raw_cors = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:4200,http://127.0.0.1:4200,http://localhost:8081,http://127.0.0.1:8081,http://localhost:80,http://127.0.0.1:80')
 CORS_ALLOWED_ORIGINS = [c.strip() for c in _raw_cors.split(',') if c.strip()]
 CORS_ALLOW_CREDENTIALS = True
+
+# Configuración de Redis Cache
+REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/1')
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': REDIS_URL,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
+}
 
 # Configuración del Motor Ollama (Redes Neuronales / LLM)
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://ollama:11434')

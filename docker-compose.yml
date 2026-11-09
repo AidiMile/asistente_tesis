@@ -15,11 +15,23 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_tesis
+    restart: unless-stopped
+    # Puerto interno 6379 aislado: comunicación exclusiva dentro de la red Docker privada
+    volumes: [ "redis_data:/data" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   ollama:
     image: ollama/ollama:latest
     container_name: ollama_nlp_ec
     restart: unless-stopped
-    entrypoint: [ "/bin/sh", "/setup_models.sh" ]
+    entrypoint: [ "/bin/sh", "-c", "tr -d '\\r' < /setup_models.sh > /tmp/setup.sh && /bin/sh /tmp/setup.sh" ]
     # Puerto interno 11434 aislado: comunicación exclusiva dentro de la red Docker privada
     volumes:
       - ollama_models:/root/.ollama
@@ -46,7 +58,7 @@ services:
              (python manage.py warm_up_model &) &&
              gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 180"
     volumes: [ "./backend:/app" ]
-    ports: [ "127.0.0.1:8000:8000" ]
+    ports: [ "8000:8000" ]
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Configura DJANGO_SECRET_KEY en el archivo .env}
       DEBUG: ${DEBUG:-True}
@@ -55,6 +67,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Debes configurar POSTGRES_PASSWORD en el archivo .env}
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/1}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
@@ -73,18 +86,30 @@ services:
     depends_on:
       db: { condition: service_healthy }
       ollama: { condition: service_healthy }
+      redis: { condition: service_healthy }
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:8000/api/health/" ]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 15
       start_period: 30s
 
   frontend:
     build: ./frontend
     container_name: angular_asistente_frontend
     restart: unless-stopped
-    ports: [ "127.0.0.1:8080:80" ]
+    ports: [ "8080:80" ]
+    depends_on:
+      backend: { condition: service_healthy }
+
+  flutter:
+    build:
+      context: ./asistente-pln-ec/frontend
+      args:
+        - API_BASE_URL=http://localhost:8000/api
+    container_name: flutter_asistente_web
+    restart: unless-stopped
+    ports: [ "8081:80" ]
     depends_on:
       backend: { condition: service_healthy }
 
@@ -93,3 +118,5 @@ volumes:
     name: asistente_postgres_data
   ollama_models:
     name: asistente_ollama_models
+  redis_data:
+    name: asistente_redis_data

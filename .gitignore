@@ -43,7 +43,11 @@ frontend/.angular/
 # Pruebas y benchmarks locales
 granite_eval_results.json
 *_eval_results.json
-asistente-pln-ec/
+asistente-pln-ec/backend/
+!asistente-pln-ec/frontend/
+asistente-pln-ec/.dockerignore
+asistente-pln-ec/frontend/.dart_tool/
+asistente-pln-ec/frontend/build/
 
 # Editores y SO
 .vscode/

@@ -881,6 +881,10 @@ export class SidebarComponent implements OnInit, OnDestroy {
     return this.authService.currentUser()?.rol || 'Estudiante';
   }
 
+  get userEmail(): string {
+    return this.authService.currentUser()?.correo || '';
+  }
+
   get userInitial(): string {
     return (this.userName[0] || 'A').toUpperCase();
   }
@@ -1004,13 +1008,13 @@ export class SidebarComponent implements OnInit, OnDestroy {
   }
 
   selectConversation(id: number): void {
-    this.sidebarService.closeMobile();
+    this.closeAll();
     this.router.navigate(['/chat', id]);
   }
 
   newConversation(): void {
+    this.closeAll();
     this.sidebarService.triggerNewConversation();
-    this.sidebarService.closeMobile();
     this.router.navigate(['/chat']);
   }
 
@@ -1037,12 +1041,17 @@ export class SidebarComponent implements OnInit, OnDestroy {
     this.sidebarService.closeMobile();
   }
 
+  closeAll(): void {
+    this.menuOpenId = null;
+    this.sidebarService.closeMobile();
+  }
+
   toggleTheme(): void {
     this.themeService.toggleTheme();
   }
 
   logout(): void {
-    this.sidebarService.closeMobile();
+    this.closeAll();
     this.authService.logout();
   }
 
