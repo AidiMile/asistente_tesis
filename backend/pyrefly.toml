@@ -1,0 +1,9 @@
+[errors]
+missing-import = "ignore"
+
+[tool.pyrefly]
+ignore-missing-imports = [
+    "django.*",
+    "rest_framework.*",
+]
+

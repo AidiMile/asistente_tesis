@@ -5,6 +5,7 @@ from .views import (
     StatsConsultasAPIView,
     EvaluacionesListAPIView,
     EvaluarRespuestaAPIView,
+    InteraccionesRecientesAPIView,
 )
 
 urlpatterns = [
@@ -16,9 +17,11 @@ urlpatterns = [
     path('stats/', StatsConsultasAPIView.as_view(), name='stats_consultas'),
     path('evaluations/', EvaluacionesListAPIView.as_view(), name='evaluaciones_list'),
     path('evaluate/', EvaluarRespuestaAPIView.as_view(), name='evaluar_respuesta'),
+    path('interacciones/', InteraccionesRecientesAPIView.as_view(), name='interacciones_recientes'),
 
     # Alias bajo /api/evaluacion/metrics/
     path('metrics/summary/', MetricasSummaryAPIView.as_view(), name='metrics_summary_alias'),
     path('metrics/evaluations/', EvaluacionesListAPIView.as_view(), name='evaluaciones_alias'),
     path('metrics/evaluate/', EvaluarRespuestaAPIView.as_view(), name='evaluar_alias'),
+    path('metrics/interacciones/', InteraccionesRecientesAPIView.as_view(), name='interacciones_alias'),
 ]

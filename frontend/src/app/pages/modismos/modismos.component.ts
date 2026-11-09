@@ -18,64 +18,98 @@ import { SidebarService } from '../../core/services/sidebar.service';
         class="flex-1 flex flex-col h-screen overflow-y-auto px-6 sm:px-10 pt-16 sm:pt-8 pb-8 bg-[var(--bg-main)] transition-all duration-300 ease-in-out">
         
         <!-- Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[var(--border-color)] mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/80 dark:border-slate-800/80 mb-6">
           <div>
-            <div class="flex items-center gap-2">
-              <h1 class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Diccionario y Corpus Dialectal Ecuatoriano</h1>
-              <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300 border border-amber-300/40 dark:border-amber-400/20">UPEC</span>
+            <div class="flex items-center gap-2.5">
+              <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                Diccionario y Corpus Dialectal Ecuatoriano
+              </h1>
+              <span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-amber-500/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300 border border-amber-500/20">
+                UPEC
+              </span>
             </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Base de conocimiento lingüístico UPEC (Tablas 6 y 7 de la Tesis)</p>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-normal">
+              Base de conocimiento lingüístico UPEC (Tablas 6 y 7 de la Tesis)
+            </p>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-sky-400 text-xs border border-emerald-500/20 dark:border-sky-500/20 font-mono font-medium">
+          
+          <div class="flex items-center">
+            <!-- Badge contador con fondo verde oscuro translúcido y texto verde brillante -->
+            <span class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 text-xs font-semibold shadow-sm tracking-wide">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               {{ modismosList.length }} Expresiones Indexadas
             </span>
           </div>
         </div>
 
         <!-- Filter Bar -->
-        <div class="flex flex-col sm:flex-row items-center gap-4 mb-6">
+        <div class="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 mb-6">
           <div class="relative flex-1 w-full">
+            <i class="bi bi-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
             <input 
               type="text" 
               [(ngModel)]="searchQuery" 
               placeholder="Buscar modismo, significado o ejemplo..." 
-              class="input-field pl-11 py-2.5 text-xs"
+              class="w-full h-11 bg-white dark:bg-[#151E32] text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl pl-11 pr-4 text-xs sm:text-sm border border-slate-200 dark:border-slate-800/90 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all shadow-sm"
             />
-            <i class="bi bi-search absolute left-4 top-3 text-slate-400"></i>
           </div>
 
-          <select [(ngModel)]="selectedRegion" class="input-field py-2.5 px-4 text-xs w-full sm:w-48">
-            <option value="">Todas las regiones</option>
-            <option value="Sierra">Sierra</option>
-            <option value="Carchi">Carchi</option>
-            <option value="Costa">Costa</option>
-            <option value="Nacional">Nacional</option>
-          </select>
+          <div class="w-full sm:w-56">
+            <select 
+              [(ngModel)]="selectedRegion" 
+              class="w-full h-11 bg-white dark:bg-[#151E32] text-slate-900 dark:text-slate-100 rounded-xl px-4 text-xs sm:text-sm border border-slate-200 dark:border-slate-800/90 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all shadow-sm cursor-pointer">
+              <option value="">Todas las regiones</option>
+              <option value="Sierra">Sierra</option>
+              <option value="Carchi">Carchi</option>
+              <option value="Costa">Costa</option>
+              <option value="Nacional">Nacional</option>
+            </select>
+          </div>
         </div>
 
-        <!-- Modisms Grid / Table -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
-          <div *ngFor="let item of filteredModismos" class="p-5 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-emerald-500/40 dark:hover:border-sky-500/40 transition-all shadow-sm space-y-3">
-            <div class="flex items-start justify-between">
-              <div>
-                <h3 class="text-base font-bold text-emerald-700 dark:text-sky-400 font-mono">{{ item.nombre_modismo }}</h3>
-                <span class="text-[11px] text-slate-500 dark:text-slate-400">{{ item.region }}</span>
+        <!-- Modisms Grid (2 Columnas en pantallas grandes, altura uniforme) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 pb-12 items-stretch">
+          <div 
+            *ngFor="let item of filteredModismos" 
+            class="flex flex-col justify-between p-5 rounded-2xl bg-white dark:bg-[#151E32] border border-slate-200/80 dark:border-slate-800/90 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
+            
+            <div class="space-y-4">
+              <!-- Top Row: Título, Región y Badge de Estado -->
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white font-mono tracking-tight break-words">
+                    {{ item.nombre_modismo }}
+                  </h3>
+                  <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    {{ item.region }}
+                  </span>
+                </div>
+                <span class="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border border-emerald-500/30">
+                  {{ item.estado || 'Activo' }}
+                </span>
               </div>
-              <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 font-medium">
-                {{ item.estado || 'Activo' }}
-              </span>
+
+              <!-- Cajas internas: Significado (sin fondo oscuro pesado, con línea sutil a la izquierda) -->
+              <div class="border-l-[3px] border-emerald-500 pl-3.5 py-1.5 bg-slate-50/60 dark:bg-slate-800/30 rounded-r-xl">
+                <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
+                  SIGNIFICADO:
+                </span>
+                <p class="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-normal">
+                  {{ getSignificado(item) }}
+                </p>
+              </div>
+
+              <!-- Cajas internas: Ejemplo de uso (con línea sutil a la izquierda y texto cursiva) -->
+              <div *ngIf="getEjemplo(item)" class="border-l-[3px] border-amber-500/80 pl-3.5 py-1.5 bg-amber-50/40 dark:bg-amber-950/20 rounded-r-xl">
+                <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5 not-italic">
+                  EJEMPLO DE USO:
+                </span>
+                <p class="text-xs sm:text-sm text-slate-700 dark:text-slate-300 italic leading-relaxed">
+                  "{{ getEjemplo(item) }}"
+                </p>
+              </div>
             </div>
 
-            <div class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-              <span class="text-slate-400 dark:text-slate-400 block text-[10px] uppercase font-bold mb-1">Significado:</span>
-              <p>{{ getSignificado(item) }}</p>
-            </div>
-
-            <div *ngIf="getEjemplo(item)" class="text-xs text-slate-600 dark:text-slate-400 italic bg-amber-50/60 dark:bg-sky-950/20 p-2.5 rounded-xl border border-amber-200/60 dark:border-sky-900/30">
-              <span class="text-amber-800 dark:text-sky-400 font-semibold not-italic text-[10px] block mb-0.5">Ejemplo de uso:</span>
-              "{{ getEjemplo(item) }}"
-            </div>
           </div>
         </div>
 

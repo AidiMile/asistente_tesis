@@ -241,7 +241,7 @@ class _S extends State<ChatScreen> {
     }
     setState(() => _listening = true);
     await _speech.listen(
-        localeId: 'es_EC',
+        listenOptions: stt.SpeechListenOptions(localeId: 'es_EC'),
         onResult: (r) {
           setState(() {
             _ctl.text = r.recognizedWords;
@@ -321,7 +321,7 @@ class _S extends State<ChatScreen> {
           border: Border.all(color: m.mine ? const Color(0xFFBCE3DC) : const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha: 0.02),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -449,7 +449,7 @@ class _S extends State<ChatScreen> {
           border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.015),
+              color: Colors.black.withValues(alpha: 0.015),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -533,7 +533,7 @@ class _S extends State<ChatScreen> {
                     border: Border.all(color: const Color(0xFFD7E4E0)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),

@@ -291,6 +291,27 @@ class GenerarTextoAPIView(APIView):
             request.user, consulta, resultado
         )
 
+        # 7. Registrar interacción detallada para evaluación dinámica y métricas (Admin + Usuarios)
+        try:
+            from apps.evaluacion.models import RegistroInteraccion
+            rol_act = 'Estudiante'
+            if hasattr(request.user, 'perfil') and request.user.perfil and request.user.perfil.rol:
+                rol_act = request.user.perfil.rol
+            elif es_administrador(request.user):
+                rol_act = 'Administrador'
+
+            RegistroInteraccion.objects.create(
+                usuario=request.user,
+                rol_usuario=rol_act,
+                pregunta_usuario=texto,
+                respuesta_ia=resultado['texto_generado'],
+                latencia=float(respuesta.tiempo_respuesta or 0.0),
+                consulta=consulta,
+                respuesta=respuesta
+            )
+        except Exception:
+            pass
+
         motivo_error = resultado.get('metricas', {}).get('motivo_error')
         return Response(
             self._response_data(consulta, respuesta, evaluacion, resultado['fuente'], es_error, motivo_error),

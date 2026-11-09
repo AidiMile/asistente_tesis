@@ -24,6 +24,7 @@ export const routes: Routes = [
   { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },
   { path: 'dashboard', component: DashboardComponent, canActivate: [adminGuard] },
   { path: 'modismos', component: ModismosComponent, canActivate: [adminGuard] },
+  { path: 'gestion-corpus', loadComponent: () => import('./pages/gestion-corpus/gestion-corpus.component').then(m => m.GestionCorpusComponent), canActivate: [adminGuard] },
   { path: 'metrics', component: MetricsComponent, canActivate: [adminGuard] },
   { path: 'history-global', component: HistoryComponent, canActivate: [adminGuard] },
   { path: '**', redirectTo: '' }

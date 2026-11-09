@@ -25,8 +25,7 @@ export interface ChatMessage {
 export class AssistantService {
   private readonly apiUrl = '/api/asistente';
 
-  constructor(private http: HttpClient, private authService: AuthService) {}
-
+  constructor(private http: HttpClient, private authService: AuthService) { }
   private getHeaders(): HttpHeaders {
     const token = this.authService.getToken();
     return new HttpHeaders({
@@ -106,5 +105,27 @@ export class AssistantService {
       texto_referencia: textoReferencia,
       guardar: guardar
     }, { headers: this.getHeaders() });
+  }
+
+  getInteraccionesRecientes(limit: number = 40): Observable<any[]> {
+    return this.http.get<any[]>(`/api/admin/metrics/interacciones/?limit=${limit}`, { headers: this.getHeaders() });
+  }
+
+  crearModismo(data: { nombre_modismo: string; region: string; significado?: string; ejemplo?: string }): Observable<any> {
+    return this.http.post<any>('/api/modismos/', data, { headers: this.getHeaders() });
+  }
+
+  subirArchivoCorpus(archivo: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    const token = this.authService.getToken();
+    const headers = new HttpHeaders({
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    });
+    return this.http.post<any>('/api/modismos/carga-masiva/', formData, { headers });
+  }
+
+  eliminarModismo(id: number): Observable<any> {
+    return this.http.delete<any>(`/api/modismos/${id}/`, { headers: this.getHeaders() });
   }
 }

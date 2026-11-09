@@ -85,6 +85,7 @@ class _S extends State<CorpusScreen> {
 
   Future<void> _link(Json c) async {
     final all = await guarded(context, () => _api.get('/admin/idioms', q: {'limit': 200}));
+    if (!mounted) return;
     final cur = await guarded(context, () => _api.get('/admin/corpus/${c['id_corpus']}/idioms'));
     if (all == null || cur == null || !mounted) return;
     final sel = <int>{for (final m in cur as List) m['id_modismo'] as int};
